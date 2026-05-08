@@ -144,8 +144,8 @@ canvas { display:block; position:absolute; top:0; left:0; outline:none; }
   <span class="sep"></span>
   <button id="btn-newfile" title="新建空白布局">+ 新建</button>
   <button id="btn-openfile" title="打开JSON文件">📂 打开</button>
-  <button id="btn-saveas" title="另存为JSON文件">💾 另存为</button>
-  <button id="btn-export" title="导出JSON文件">📥 导出</button>
+  <button id="btn-save" title="保存当前文件 (Ctrl+S)">💾 保存</button>
+  <button id="btn-saveas" title="另存为新文件">📥 另存为</button>
   <input type="file" id="open-file-input" accept=".json" style="display:none">
 </div>
 
@@ -1925,7 +1925,7 @@ class App {
     if (ctrl && e.key === 'v') { e.preventDefault(); this.paste(); return; }
     if (ctrl && e.key === 'x') { e.preventDefault(); this.cut(); return; }
     if (ctrl && e.key === 'r') { e.preventDefault(); this.rotateComponent(); return; }
-    if (ctrl && e.key === 's') { e.preventDefault(); this._saveAs(); return; }
+    if (ctrl && e.key === 's') { e.preventDefault(); this._save(); return; }
 
     if (e.key === 'h' || e.key === 'H') { e.preventDefault(); this.flipHorizontal(); return; }
     if (e.key === 'v' || e.key === 'V') { e.preventDefault(); this.flipVertical(); return; }
@@ -2686,13 +2686,11 @@ class App {
     // 文件管理
     document.getElementById('btn-newfile').addEventListener('click', () => this._newFile());
     document.getElementById('btn-openfile').addEventListener('click', () => this._openFile());
+    document.getElementById('btn-save').addEventListener('click', () => this._save());
     document.getElementById('btn-saveas').addEventListener('click', () => this._saveAs());
     document.getElementById('open-file-input').addEventListener('change', (e) => {
       this._handleOpenFile(e.target.files[0]); e.target.value = '';
     });
-
-    // 导出按钮
-    document.getElementById('btn-export').addEventListener('click', () => this._exportJSON());
 
     // 工作区管理
     document.getElementById('btn-ws-import').addEventListener('click', () => {
@@ -2754,13 +2752,32 @@ class App {
   }
 
   // ==================== 文件管理 ====================
-  // 另存为：弹出命名框，下载 JSON 文件到电脑
+  // 保存：更新当前文件（工作区内覆盖+下载JSON）
+  _save() {
+    if (this._currentFile === '未命名' || this._currentFile.startsWith('untitled')) {
+      this._saveAs(); return;
+    }
+    this._downloadJSON(this._currentFile + '.json');
+    const exist = this._workspaceFiles.findIndex(f => f.name === this._currentFile);
+    if (exist >= 0) {
+      this._workspaceFiles[exist].data = this.model.toJSON();
+    } else {
+      this._workspaceFiles.push({name: this._currentFile, data: this.model.toJSON()});
+    }
+    this._saveWorkspace();
+    this._updateWorkspaceUI();
+    this._isDirty = false;
+    this._autoSave();
+    document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}.json`;
+  }
+
+  // 另存为：弹出命名框，下载 JSON 文件
   _saveAs() {
-    const name = prompt('文件名:', this._currentFile === '未命名' ? 'my-layout' : this._currentFile);
+    const defName = (this._currentFile === '未命名' || (this._currentFile||'').startsWith('untitled')) ? 'my-layout' : this._currentFile;
+    const name = prompt('文件名:', defName);
     if (!name || !name.trim()) return;
     this._currentFile = name.trim();
     this._downloadJSON(this._currentFile + '.json');
-    // 更新工作区
     const exist = this._workspaceFiles.findIndex(f => f.name === this._currentFile);
     if (exist >= 0) {
       this._workspaceFiles[exist].data = this.model.toJSON();
@@ -2779,22 +2796,28 @@ class App {
     document.getElementById('open-file-input').click();
   }
 
-  // 新建：清空所有内容
+  // 新建：自动命名 untitled / untitled2 / untitled3 ...
   _newFile() {
-    if (this.model.allComponents().length > 0 || this.model.solderTraces.length > 0) {
-      if (!confirm('当前布局未保存，是否继续新建？')) return;
+    if (this._isDirty) {
+      if (!confirm(`"${this._currentFile}" 有未保存的修改，是否继续新建？`)) return;
     }
     this._autoSave();
+    // 自动编号 untitled
+    let n = 1, name = 'untitled';
+    while (this._workspaceFiles.find(f => f.name === name)) { n++; name = 'untitled' + n; }
     this.model = new DataModel();
     this.cmdMgr.clear();
     this.selectedObject = null;
-    this._smdCounter = 0;
-    this._headerCounter = 0;
-    this._currentFile = '未命名';
+    this._smdCounter = 0; this._headerCounter = 0;
+    this._currentFile = name;
     this._isDirty = false;
+    // 加入工作区
+    this._workspaceFiles.push({name, data: this.model.toJSON()});
+    this._saveWorkspace();
+    this._updateWorkspaceUI();
     this._updateCompList();
     this._updatePropPanel();
-    document.getElementById('status-hint').textContent = '已新建空白布局';
+    document.getElementById('status-hint').textContent = `已新建: ${name}`;
   }
 
   // ==================== 工作区管理 ====================
@@ -2853,16 +2876,11 @@ class App {
         if (e.target.dataset.del) return;
         const name = el.dataset.ws;
         if (name === this._currentFile) return;
-        // 切换前：如果当前文件有修改，自动暂存到工作区
-        if (this._isDirty && this._currentFile !== '未命名') {
-          const exist = this._workspaceFiles.findIndex(f => f.name === this._currentFile);
-          const curData = this.model.toJSON();
-          if (exist >= 0) {
-            this._workspaceFiles[exist].data = curData;
-          } else {
-            this._workspaceFiles.push({name: this._currentFile, data: curData});
+        // 切换前：如果当前文件有修改，提示保存
+        if (this._isDirty) {
+          if (confirm(`"${this._currentFile}" 有未保存的修改，是否保存后切换？`)) {
+            this._save();
           }
-          this._saveWorkspace();
         }
         this._autoSave();
         const f = this._workspaceFiles.find(x => x.name === name);
@@ -2882,6 +2900,7 @@ class App {
           }
           this._currentFile = name;
           this._isDirty = false;
+          this._needsRender = true;
           this._updateWorkspaceUI();
           this._updateCompList();
           this._updatePropPanel();
@@ -2903,21 +2922,20 @@ class App {
     });
   }
 
-  // 重写 _handleOpenFile：打开并加入工作区
+  // 打开文件并加入工作区
   _handleOpenFile(file) {
     if (!file) return;
+    document.getElementById('status-hint').textContent = '正在加载...';
     const reader = new FileReader();
     reader.onload = () => {
       try {
         const data = JSON.parse(reader.result);
         const name = file.name.replace(/\.json$/i, '');
-        // 加入工作区（去重）
         const exist = this._workspaceFiles.findIndex(f => f.name === name);
         if (exist >= 0) this._workspaceFiles.splice(exist, 1);
         this._workspaceFiles.push({name, data});
         this._saveWorkspace();
 
-        // 切换到该文件
         this.model = new DataModel();
         this.model.fromJSON(data);
         this.cmdMgr.clear();
@@ -2933,6 +2951,7 @@ class App {
         }
         this._currentFile = name;
         this._isDirty = false;
+        this._needsRender = true;
         this._updateWorkspaceUI();
         this._updateCompList();
         this._updatePropPanel();
