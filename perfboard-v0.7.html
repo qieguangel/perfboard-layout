@@ -1035,9 +1035,12 @@ class App {
     const dy = pos.y - this.mouseDownSY;
     this.mouseX = pos.x; this.mouseY = pos.y;
 
-    // 更新格点高亮
-    const gp = this.hitTester.nearestGridPoint(pos.x, pos.y);
-    this.highlightedGridPoint = gp;
+    // 更新格点高亮（焊锡模式始终显示，其他模式仅靠近格点时显示）
+    if (this.mode === 'solder') {
+      this.highlightedGridPoint = this.hitTester.screenToGrid(pos.x, pos.y);
+    } else {
+      this.highlightedGridPoint = this.hitTester.nearestGridPoint(pos.x, pos.y);
+    }
 
     // 右键平移
     if (this.mouseDown && this.mouseButton === 2) {
@@ -1182,45 +1185,6 @@ class App {
   // ==================== 双击处理 ====================
   _onDoubleClick(e) {
     const pos = this._getMousePos(e);
-
-    // 焊锡模式：取消单击延时，处理开始或结束
-    if (this.mode === 'solder') {
-      if (this._solderTimer) { clearTimeout(this._solderTimer); this._solderTimer = null; }
-      const gp = this.hitTester.nearestGridPoint(pos.x, pos.y);
-      if (!gp) return;
-      if (!this.routingState) {
-        // 双击开始走线
-        const ep = this.hitTester.solderEndpointAt(pos.x, pos.y);
-        if (ep) {
-          this.routingFromEndpoint = ep;
-          this.routingState = {points: [{gx: ep.point.gx, gy: ep.point.gy}]};
-        } else {
-          this.routingState = {points: [{gx: gp.gx, gy: gp.gy}]};
-        }
-        document.getElementById('status-hint').textContent = '焊锡走线已开始 | 单击固定段 | 双击结束';
-      } else {
-        // 双击结束：先提交到双击点的最后一段，再结束
-        const last = this.routingState.points[this.routingState.points.length - 1];
-        if (last.gx !== gp.gx || last.gy !== gp.gy) {
-          if (last.gx !== gp.gx && last.gy !== gp.gy) {
-            if (Math.abs(gp.gx - last.gx) >= Math.abs(gp.gy - last.gy)) {
-              this.routingState.points.push({gx: gp.gx, gy: last.gy});
-            } else {
-              this.routingState.points.push({gx: last.gx, gy: gp.gy});
-            }
-          }
-          this.routingState.points.push({gx: gp.gx, gy: gp.gy});
-        }
-        if (this.routingState.points.length >= 2) {
-          this._finishRouting();
-        } else {
-          this.routingState = null;
-          this.routingFromEndpoint = null;
-        }
-        document.getElementById('status-hint').textContent = '焊锡走线已完成';
-      }
-      return;
-    }
 
     // 检查是否双击了排针引脚
     const pinHit = this._hitTestHeaderPin(pos.x, pos.y);
@@ -1537,13 +1501,58 @@ class App {
     this._autoSave();
   }
 
+  // 焊锡模式的mousedown入口：用点击计数区分单击/双击
   _handleSolderClick(pos) {
-    const gp = this.hitTester.nearestGridPoint(pos.x, pos.y);
+    // 直接用 screenToGrid 而非 nearestGridPoint，保证空白处也能落到格点
+    const gp = this.hitTester.screenToGrid(pos.x, pos.y);
     if (!gp) return;
 
+    this._solderClickCount = (this._solderClickCount || 0) + 1;
+    if (this._solderClickCount === 1) {
+      // 第一次点击 → 启动定时器，280ms后认定为单击
+      this._solderClickPos = {gx: gp.gx, gy: gp.gy};
+      if (this._solderTimer) clearTimeout(this._solderTimer);
+      this._solderTimer = setTimeout(() => {
+        this._solderTimer = null;
+        this._solderClickCount = 0;
+        this._handleSolderSingleClick(this._solderClickPos);
+      }, 280);
+    } else {
+      // 第二次点击在280ms内到达 → 双击
+      if (this._solderTimer) { clearTimeout(this._solderTimer); this._solderTimer = null; }
+      this._solderClickCount = 0;
+      this._handleSolderDoubleClick({gx: gp.gx, gy: gp.gy});
+    }
+  }
+
+  // 单击逻辑：固定当前段并继续（要求已有活跃走线）
+  _handleSolderSingleClick(gp) {
     if (!this.routingState) {
-      // 单击开始走线
-      const ep = this.hitTester.solderEndpointAt(pos.x, pos.y);
+      // 没有活跃走线时单击 → 给提示，要求双击开始
+      document.getElementById('status-hint').textContent = '焊锡模式：双击格点开始走线';
+      return;
+    }
+    const last = this.routingState.points[this.routingState.points.length - 1];
+    if (last.gx === gp.gx && last.gy === gp.gy) return;
+
+    // 添加曼哈顿路径（必要时插入中间点）
+    if (last.gx !== gp.gx && last.gy !== gp.gy) {
+      if (Math.abs(gp.gx - last.gx) >= Math.abs(gp.gy - last.gy)) {
+        this.routingState.points.push({gx: gp.gx, gy: last.gy});
+      } else {
+        this.routingState.points.push({gx: last.gx, gy: gp.gy});
+      }
+    }
+    this.routingState.points.push({gx: gp.gx, gy: gp.gy});
+    this._commitAndContinueRouting();
+  }
+
+  // 双击逻辑：开始 或 结束走线
+  _handleSolderDoubleClick(gp) {
+    if (!this.routingState) {
+      // 没有活跃走线 → 双击开始
+      const screenPos = this.hitTester.gridToScreen(gp.gx, gp.gy);
+      const ep = this.hitTester.solderEndpointAt(screenPos.sx, screenPos.sy);
       if (ep) {
         this.routingFromEndpoint = ep;
         this.routingState = {points: [{gx: ep.point.gx, gy: ep.point.gy}]};
@@ -1554,31 +1563,25 @@ class App {
       return;
     }
 
-    // 已有活跃走线 → 设置延时提交（等250ms，若双击则取消）
-    this._solderPendingGp = {gx: gp.gx, gy: gp.gy};
-    if (this._solderTimer) clearTimeout(this._solderTimer);
-    this._solderTimer = setTimeout(() => {
-      this._solderTimer = null;
-      this._doSolderCommit(this._solderPendingGp);
-    }, 250);
-  }
-
-  // 实际提交焊锡段（单次单击确认后调用）
-  _doSolderCommit(gp) {
-    if (!this.routingState || !gp) return;
+    // 已有活跃走线 → 双击结束（先把双击点作为终点提交）
     const last = this.routingState.points[this.routingState.points.length - 1];
-    if (last.gx === gp.gx && last.gy === gp.gy) return;
-
-    // 曼哈顿中间点
-    if (last.gx !== gp.gx && last.gy !== gp.gy) {
-      if (Math.abs(gp.gx - last.gx) >= Math.abs(gp.gy - last.gy)) {
-        this.routingState.points.push({gx: gp.gx, gy: last.gy});
-      } else {
-        this.routingState.points.push({gx: last.gx, gy: gp.gy});
+    if (last.gx !== gp.gx || last.gy !== gp.gy) {
+      if (last.gx !== gp.gx && last.gy !== gp.gy) {
+        if (Math.abs(gp.gx - last.gx) >= Math.abs(gp.gy - last.gy)) {
+          this.routingState.points.push({gx: gp.gx, gy: last.gy});
+        } else {
+          this.routingState.points.push({gx: last.gx, gy: gp.gy});
+        }
       }
+      this.routingState.points.push({gx: gp.gx, gy: gp.gy});
     }
-    this.routingState.points.push({gx: gp.gx, gy: gp.gy});
-    this._commitAndContinueRouting();
+    if (this.routingState.points.length >= 2) {
+      this._finishRouting();
+    } else {
+      this.routingState = null;
+      this.routingFromEndpoint = null;
+    }
+    document.getElementById('status-hint').textContent = '焊锡走线已完成';
   }
 
   // 提交当前焊锡段并继续从终点走线
@@ -1701,9 +1704,11 @@ class App {
     if (e.key === '4') { this.setMode('flywire'); return; }
     if (e.key === '5') { this.setMode('solder'); return; }
 
-    // 焊锡模式下 Enter / 双击 完成当前走线
+    // 焊锡模式下 Enter 完成当前走线
     if (e.key === 'Enter' && this.mode === 'solder' && this.routingState) {
       e.preventDefault();
+      if (this._solderTimer) { clearTimeout(this._solderTimer); this._solderTimer = null; }
+      this._solderClickCount = 0;
       if (this.routingState.points.length >= 2) {
         this._finishRouting();
         document.getElementById('status-hint').textContent = '焊锡走线已完成';
@@ -1720,6 +1725,8 @@ class App {
     this.routingFromEndpoint = null;
     if (this._solderTimer) { clearTimeout(this._solderTimer); this._solderTimer = null; }
     this._solderPendingGp = null;
+    this._solderClickCount = 0;
+    this._solderClickPos = null;
     this.headerPreview = null;
     this.flyWireStart = null;
     this.smdStart = null;
