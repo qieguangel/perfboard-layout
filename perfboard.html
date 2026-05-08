@@ -89,45 +89,21 @@ canvas { display:block; position:absolute; top:0; left:0; outline:none; }
   padding:3px 6px; border-radius:3px; font-size:11px;
 }
 #prop-panel button { margin-top:6px; padding:3px 10px; background:var(--accent); color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px; }
-#help-overlay, #dialog-overlay {
+#help-overlay {
   display:none; position:fixed; top:0; left:0; width:100%; height:100%;
   background:rgba(0,0,0,0.6); z-index:100; justify-content:center; align-items:center;
 }
-#help-overlay.show, #dialog-overlay.show { display:flex; }
-#help-panel, .dialog-panel {
+#help-overlay.show { display:flex; }
+#help-panel {
   background:var(--bg2); border:1px solid var(--border); border-radius:8px;
   padding:16px 20px; max-width:500px; width:90%; color:var(--text); font-size:12px;
 }
-#help-panel h3, .dialog-panel h3 { color:var(--accent); margin-bottom:10px; }
+#help-panel h3 { color:var(--accent); margin-bottom:10px; }
 #help-panel table { width:100%; border-collapse:collapse; }
 #help-panel td { padding:3px 8px; border-bottom:1px solid var(--bg); }
 #help-panel td:first-child { color:#f39c12; white-space:nowrap; font-family:monospace; width:40%; }
-#help-panel .close-btn, .dialog-panel .close-btn { float:right; background:none; border:none; color:var(--text2); cursor:pointer; font-size:18px; }
-#help-panel .close-btn:hover, .dialog-panel .close-btn:hover { color:var(--text); }
-.dialog-panel .row { display:flex; gap:6px; align-items:center; margin-bottom:8px; }
-.dialog-panel .row input {
-  flex:1; background:var(--bg); border:1px solid var(--border); color:var(--text);
-  padding:5px 8px; border-radius:4px; font-size:12px;
-}
-.dialog-panel .btn-row { display:flex; gap:6px; justify-content:flex-end; }
-.dialog-panel .btn-row button {
-  padding:5px 14px; border:1px solid var(--border); border-radius:4px;
-  background:var(--bg); color:var(--btn-text); cursor:pointer; font-size:12px;
-}
-.dialog-panel .btn-row button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
-#file-list { max-height:200px; overflow-y:auto; margin-bottom:8px; }
-#file-list .file-row {
-  display:flex; justify-content:space-between; align-items:center;
-  padding:4px 8px; cursor:pointer; border-bottom:1px solid var(--bg); font-size:12px;
-}
-#file-list .file-row:hover { background:var(--bg); }
-#file-list .file-row.current { color:var(--accent); font-weight:bold; }
-#file-list .file-row .del-btn { color:var(--text2); cursor:pointer; font-size:14px; }
-#file-list .file-row .del-btn:hover { color:var(--accent); }
-#theme-toggle {
-  padding:4px 8px; font-size:16px; cursor:pointer; background:none; border:1px solid var(--border);
-  border-radius:4px; line-height:1;
-}
+#help-panel .close-btn { float:right; background:none; border:none; color:var(--text2); cursor:pointer; font-size:18px; }
+#help-panel .close-btn:hover { color:var(--text); }
 </style>
 </head>
 <body>
@@ -160,12 +136,11 @@ canvas { display:block; position:absolute; top:0; left:0; outline:none; }
   <button id="btn-help" title="快捷键说明">?</button>
   <button id="btn-theme" title="切换浅色/深色模式">🌓</button>
   <span class="sep"></span>
-  <select id="file-selector" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 6px;border-radius:4px;font-size:11px;max-width:120px;"></select>
-  <button id="btn-newfile" title="新建文件">+新建</button>
-  <button id="btn-saveas" title="另存为">💾 另存</button>
-  <button id="btn-export">📥 导出</button>
-  <button id="btn-import">📤 导入</button>
-  <input type="file" id="import-file" accept=".json" style="display:none">
+  <button id="btn-newfile" title="新建空白布局">+ 新建</button>
+  <button id="btn-openfile" title="打开JSON文件">📂 打开</button>
+  <button id="btn-saveas" title="另存为JSON文件">💾 另存为</button>
+  <button id="btn-export" title="导出JSON文件">📥 导出</button>
+  <input type="file" id="open-file-input" accept=".json" style="display:none">
 </div>
 
 <div id="main-area">
@@ -207,19 +182,6 @@ canvas { display:block; position:absolute; top:0; left:0; outline:none; }
       <tr><td>Delete</td><td>删除选中对象</td></tr>
       <tr><td>Escape</td><td>取消当前操作 / 取消选中</td></tr>
     </table>
-  </div>
-</div>
-
-<div id="dialog-overlay" onclick="if(event.target===this) this.classList.remove('show')">
-  <div class="dialog-panel">
-    <button class="close-btn" onclick="document.getElementById('dialog-overlay').classList.remove('show')">&times;</button>
-    <h3 id="dialog-title">另存为</h3>
-    <div class="row"><input id="dialog-input" placeholder="输入文件名..."></div>
-    <div id="file-list"></div>
-    <div class="btn-row">
-      <button onclick="document.getElementById('dialog-overlay').classList.remove('show')">取消</button>
-      <button class="primary" id="dialog-ok">确定</button>
-    </div>
   </div>
 </div>
 
@@ -732,6 +694,24 @@ class Renderer {
       ctx.setLineDash([dashLen, dashLen]);
       ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
       ctx.setLineDash([]);
+    } else if (sel.trace && sel.segIdx !== undefined) {
+      // 焊锡段选中高亮
+      const gs = this.gridSize * this.zoom;
+      const t0 = this.gridToScreen(sel.trace.points[sel.segIdx].gx, sel.trace.points[sel.segIdx].gy);
+      const t1 = this.gridToScreen(sel.trace.points[sel.segIdx + 1].gx, sel.trace.points[sel.segIdx + 1].gy);
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(245, 158, 11, 0.45)';
+      ctx.lineWidth = Math.max(7, gs * 0.5);
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(t0.sx, t0.sy); ctx.lineTo(t1.sx, t1.sy); ctx.stroke();
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = Math.max(3, gs * 0.26);
+      ctx.beginPath(); ctx.moveTo(t0.sx, t0.sy); ctx.lineTo(t1.sx, t1.sy); ctx.stroke();
+      ctx.fillStyle = '#f59e0b';
+      const er = Math.max(3, gs * 0.18);
+      ctx.beginPath(); ctx.arc(t0.sx, t0.sy, er, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(t1.sx, t1.sy, er, 0, Math.PI * 2); ctx.fill();
+      ctx.lineCap = 'butt';
     }
   }
 
@@ -771,8 +751,8 @@ class Renderer {
     const headerPreview = this.app.headerPreview;
     if (headerPreview) {
       const p = this.gridToScreen(headerPreview.gx, headerPreview.gy);
-      const w = headerPreview.w * gs;
-      const h = headerPreview.h * gs;
+      const w = (headerPreview.w - 1) * gs;
+      const h = (headerPreview.h - 1) * gs;
       const m = gs * 0.35;
       ctx.strokeStyle = 'rgba(46, 204, 113, 0.5)';
       ctx.lineWidth = 2;
@@ -874,7 +854,6 @@ class App {
 
     // 文件管理
     this._currentFile = '未命名';
-    this._fileList = [];
 
     // 主题
     this._isLight = false;
@@ -1564,7 +1543,7 @@ class App {
     if (ctrl && e.key === 'v') { e.preventDefault(); this.paste(); return; }
     if (ctrl && e.key === 'x') { e.preventDefault(); this.cut(); return; }
     if (ctrl && e.key === 'r') { e.preventDefault(); this.rotateComponent(); return; }
-    if (ctrl && e.key === 's') { e.preventDefault(); this._showSaveDialog(); return; }
+    if (ctrl && e.key === 's') { e.preventDefault(); this._saveAs(); return; }
 
     if (e.key === 'h' || e.key === 'H') { e.preventDefault(); this.flipHorizontal(); return; }
     if (e.key === 'v' || e.key === 'V') { e.preventDefault(); this.flipVertical(); return; }
@@ -1644,14 +1623,19 @@ class App {
     this._autoSave();
   }
 
-  exportJSON() {
+  _exportJSON() {
+    const name = this._currentFile === '未命名' ? 'perfboard-layout' : this._currentFile;
+    this._downloadJSON(name + '.json');
+    document.getElementById('status-hint').textContent = `已导出: ${name}.json`;
+  }
+
+  _downloadJSON(filename) {
     const data = JSON.stringify(this.model.toJSON(), null, 2);
     const blob = new Blob([data], {type:'application/json'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'perfboard-layout.json'; a.click();
+    a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
-    document.getElementById('status-hint').textContent = '已导出';
   }
 
   deleteSelected() {
@@ -1944,32 +1928,6 @@ class App {
       document.getElementById('help-overlay').classList.toggle('show');
     });
 
-    document.getElementById('btn-export').addEventListener('click', () => this.exportJSON());
-
-    document.getElementById('btn-import').addEventListener('click', () => {
-      document.getElementById('import-file').click();
-    });
-    document.getElementById('import-file').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const data = JSON.parse(reader.result);
-          this.model.fromJSON(data);
-          this.selectedObject = null;
-          this._updateCompList();
-          this._updatePropPanel();
-          this._autoSave();
-          document.getElementById('status-hint').textContent = '导入成功';
-        } catch (err) {
-          alert('导入失败：无效的 JSON 文件');
-        }
-      };
-      reader.readAsText(file);
-      e.target.value = '';
-    });
-
     document.getElementById('prop-apply').addEventListener('click', () => {
       const sel = this.selectedObject;
       if (!sel || (sel.type !== 'smd' && sel.type !== 'header')) return;
@@ -1986,12 +1944,14 @@ class App {
 
     // 文件管理
     document.getElementById('btn-newfile').addEventListener('click', () => this._newFile());
-    document.getElementById('btn-saveas').addEventListener('click', () => this._showSaveDialog());
-    document.getElementById('file-selector').addEventListener('change', (e) => this._switchFile(e.target.value));
-    document.getElementById('dialog-ok').addEventListener('click', () => this._doSaveAs());
+    document.getElementById('btn-openfile').addEventListener('click', () => this._openFile());
+    document.getElementById('btn-saveas').addEventListener('click', () => this._saveAs());
+    document.getElementById('open-file-input').addEventListener('change', (e) => {
+      this._handleOpenFile(e.target.files[0]); e.target.value = '';
+    });
 
-    // 导出按钮保持直接下载 JSON
-    // Ctrl+S → 另存为对话框
+    // 导出按钮
+    document.getElementById('btn-export').addEventListener('click', () => this._exportJSON());
 
     // 关闭页面前自动保存
     window.addEventListener('beforeunload', () => this._autoSave());
@@ -2009,33 +1969,58 @@ class App {
   }
 
   // ==================== 文件管理 ====================
-  _showSaveDialog() {
-    document.getElementById('dialog-title').textContent = '另存为';
-    document.getElementById('dialog-input').value = this._currentFile === '未命名' ? '' : this._currentFile;
-    this._updateFileList();
-    document.getElementById('dialog-overlay').classList.add('show');
-    document.getElementById('dialog-input').focus();
-  }
-
-  _doSaveAs() {
-    const name = document.getElementById('dialog-input').value.trim();
-    if (!name) return;
-    this._saveFileAs(name);
-    document.getElementById('dialog-overlay').classList.remove('show');
-  }
-
-  _saveFileAs(name) {
-    this._currentFile = name;
-    if (!this._fileList.includes(name)) {
-      this._fileList.push(name);
-    }
-    this._saveFileList();
-    this._updateFileSelector();
+  // 另存为：弹出命名框，下载 JSON 文件到电脑
+  _saveAs() {
+    const name = prompt('文件名:', this._currentFile === '未命名' ? 'my-layout' : this._currentFile);
+    if (!name || !name.trim()) return;
+    this._currentFile = name.trim();
+    this._downloadJSON(this._currentFile + '.json');
     this._autoSave();
-    document.getElementById('status-hint').textContent = `已保存: ${name}`;
+    document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}.json`;
   }
 
+  // 打开：触发文件选择器
+  _openFile() {
+    document.getElementById('open-file-input').click();
+  }
+
+  // 处理打开的文件
+  _handleOpenFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        this.model = new DataModel();
+        this.model.fromJSON(data);
+        this.cmdMgr.clear();
+        this.selectedObject = null;
+        this._smdCounter = 0; this._headerCounter = 0;
+        for (const c of this.model.smdComponents) {
+          const m = c.name.match(/^R(\d+)$/);
+          if (m) this._smdCounter = Math.max(this._smdCounter, parseInt(m[1]) + 1);
+        }
+        for (const c of this.model.headerComponents) {
+          const m = c.name.match(/^J(\d+)$/);
+          if (m) this._headerCounter = Math.max(this._headerCounter, parseInt(m[1]) + 1);
+        }
+        this._currentFile = file.name.replace(/\.json$/i, '');
+        this._updateCompList();
+        this._updatePropPanel();
+        this._autoSave();
+        document.getElementById('status-hint').textContent = `已打开: ${file.name}`;
+      } catch (err) {
+        alert('打开失败：无效的 JSON 文件');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // 新建：清空所有内容
   _newFile() {
+    if (this.model.allComponents().length > 0 || this.model.solderTraces.length > 0) {
+      if (!confirm('当前布局未保存，是否继续新建？')) return;
+    }
     this._autoSave();
     this.model = new DataModel();
     this.cmdMgr.clear();
@@ -2043,93 +2028,20 @@ class App {
     this._smdCounter = 0;
     this._headerCounter = 0;
     this._currentFile = '未命名';
-    this._updateFileSelector();
     this._updateCompList();
     this._updatePropPanel();
-    document.getElementById('status-hint').textContent = '新建文件';
+    document.getElementById('status-hint').textContent = '已新建空白布局';
   }
 
-  _switchFile(name) {
-    if (!name || name === this._currentFile) return;
-    this._autoSave(); // 保存当前文件
-    this._currentFile = name;
-    this._loadCurrentFile();
-    this._updateFileSelector();
-    this._updateCompList();
-    this._updatePropPanel();
-    document.getElementById('status-hint').textContent = `已切换: ${name}`;
-  }
-
-  _saveFileList() {
-    try { localStorage.setItem('perfboard_file_list', JSON.stringify(this._fileList)); } catch(e) {}
-  }
-
-  _loadFileList() {
-    try {
-      const data = localStorage.getItem('perfboard_file_list');
-      this._fileList = data ? JSON.parse(data) : [];
-    } catch(e) { this._fileList = []; }
-  }
-
-  _loadCurrentFile() {
-    this.model = new DataModel();
-    this.cmdMgr.clear();
-    if (this._currentFile && this._currentFile !== '未命名') {
-      try {
-        const data = localStorage.getItem(`perfboard_file_${this._currentFile}`);
-        if (data) this.model.fromJSON(JSON.parse(data));
-      } catch(e) {}
-    }
-    // 恢复计数器
-    this._smdCounter = 0; this._headerCounter = 0;
-    for (const c of this.model.smdComponents) {
-      const m = c.name.match(/^R(\d+)$/);
-      if (m) this._smdCounter = Math.max(this._smdCounter, parseInt(m[1]) + 1);
-    }
-    for (const c of this.model.headerComponents) {
-      const m = c.name.match(/^J(\d+)$/);
-      if (m) this._headerCounter = Math.max(this._headerCounter, parseInt(m[1]) + 1);
-    }
-  }
-
-  _updateFileSelector() {
-    const sel = document.getElementById('file-selector');
-    sel.innerHTML = `<option value="">${this._currentFile === '未命名' ? '未命名' : this._currentFile}</option>` +
-      (this._currentFile !== '未命名' ? '<option value="">-- 未命名 --</option>' : '') +
-      this._fileList.filter(f => f !== this._currentFile).map(f => `<option value="${f}">${f}</option>`).join('');
-  }
-
-  _updateFileList() {
-    const list = document.getElementById('file-list');
-    const files = this._fileList.filter(f => f !== this._currentFile);
-    list.innerHTML = files.length === 0 ? '<div style="color:var(--text2);font-size:11px;padding:4px;">（无其他文件）</div>' :
-      files.map(f => `<div class="file-row"><span>${f}</span><span class="del-btn" data-file="${f}">&times;</span></div>`).join('');
-    list.querySelectorAll('.del-btn').forEach(el => {
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const f = el.dataset.file;
-        this._fileList = this._fileList.filter(x => x !== f);
-        this._saveFileList();
-        try { localStorage.removeItem(`perfboard_file_${f}`); } catch(e) {}
-        this._updateFileList();
-        this._updateFileSelector();
-      });
-    });
-    list.querySelectorAll('.file-row').forEach(el => {
-      el.addEventListener('click', () => {
-        document.getElementById('dialog-input').value = el.querySelector('span').textContent;
-      });
-    });
-  }
-
-  // ==================== 持久化 ====================
+  // ==================== 持久化（仅用于会话恢复） ====================
   _autoSave() {
     try {
-      if (this._currentFile && this._currentFile !== '未命名') {
-        localStorage.setItem(`perfboard_file_${this._currentFile}`, JSON.stringify(this.model.toJSON()));
-      }
-      // 同时保存当前临时数据
-      localStorage.setItem('perfboard_data', JSON.stringify({model: this.model.toJSON(), currentFile: this._currentFile, smdCounter: this._smdCounter, headerCounter: this._headerCounter}));
+      localStorage.setItem('perfboard_session', JSON.stringify({
+        model: this.model.toJSON(),
+        currentFile: this._currentFile,
+        smdCounter: this._smdCounter,
+        headerCounter: this._headerCounter,
+      }));
     } catch(e) {}
   }
 
@@ -2140,12 +2052,9 @@ class App {
       if (theme === 'light') { this._isLight = true; document.documentElement.classList.add('light'); }
     } catch(e) {}
 
-    // 恢复文件列表
-    this._loadFileList();
-
-    // 恢复上次会话状态
+    // 恢复上次会话
     try {
-      const data = localStorage.getItem('perfboard_data');
+      const data = localStorage.getItem('perfboard_session');
       if (data) {
         const parsed = JSON.parse(data);
         if (parsed.model) {
@@ -2153,8 +2062,6 @@ class App {
           this._currentFile = parsed.currentFile || '未命名';
           this._smdCounter = parsed.smdCounter || 0;
           this._headerCounter = parsed.headerCounter || 0;
-        } else {
-          this.model.fromJSON(parsed);
         }
       }
     } catch(e) {}
@@ -2168,8 +2075,6 @@ class App {
       const m = c.name.match(/^J(\d+)$/);
       if (m) this._headerCounter = Math.max(this._headerCounter, parseInt(m[1]) + 1);
     }
-
-    this._updateFileSelector();
 
     // 初始居中
     this.offsetX = this.canvas.parentElement.clientWidth / 2;
