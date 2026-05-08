@@ -1157,8 +1157,8 @@ class App {
       // 已在mousedown中处理选中
     }
 
-    // 如果没拖动且走线状态只是起点（没来得及拖），取消走线
-    if (this.routingState && this.routingState.points.length <= 1 && !this.isDragging) {
+    // 选择模式下：没拖动且走线只有起点 → 取消（焊锡模式走双击流程，不受此影响）
+    if (this.mode !== 'solder' && this.routingState && this.routingState.points.length <= 1 && !this.isDragging) {
       this.routingState = null;
       this.routingFromEndpoint = null;
     }
