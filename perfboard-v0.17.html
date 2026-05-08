@@ -1210,8 +1210,18 @@ class App {
         return;
       }
 
-      // 器件移动
-      if (this.dragCompStart && this.selectedObject && elapsed >= LONG_PRESS_MS) {
+      // 器件/编组/框选移动
+      if ((this.dragCompStart || this._dragGroupStart) && this.selectedObject && elapsed >= LONG_PRESS_MS) {
+        // 框选状态下自动转为临时_dragGroupStart
+        if (!this._dragGroupStart && this._multiSelection.length >= 2) {
+          this._dragGroupStart = [];
+          for (const cid of this._multiSelection) {
+            const c = this.model.findById(cid);
+            if (!c) continue;
+            if (c.type === 'smd') this._dragGroupStart.push({comp:c, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
+            else this._dragGroupStart.push({comp:c, gx:c.gx, gy:c.gy});
+          }
+        }
         this.isDragging = true;
         this._moveComponentToCursor(pos);
         return;
@@ -1224,7 +1234,7 @@ class App {
     if (this.isDragging) {
       if (this.dragSegInfo) {
         this._dragSegment(pos);
-      } else if (this.dragCompStart && this.selectedObject) {
+      } else if (this._dragGroupStart || (this.dragCompStart && this.selectedObject)) {
         this._moveComponentToCursor(pos);
       } else if (this.routingState) {
         this._updateRouting(pos);
@@ -1271,8 +1281,8 @@ class App {
       return;
     }
 
-    // 器件移动完成
-    if (this.isDragging && this.dragCompStart && this.selectedObject) {
+    // 器件/编组/框选移动完成
+    if (this.isDragging && (this._dragGroupStart || (this.dragCompStart && this.selectedObject))) {
       this._finishComponentMove();
       this.mouseDown = false;
       this.isDragging = false;
