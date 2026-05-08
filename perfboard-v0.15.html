@@ -1475,6 +1475,8 @@ class App {
     });
 
     this.cmdMgr.execute(cmd);
+    // 拖拽后合并共线点
+    this._mergeColinear(trace);
     this.dragSegInfo = null;
     this.dragSegStartPoints = null;
     this.selectedObject = null;
@@ -2040,37 +2042,40 @@ class App {
     const seg = this.hitTester.solderSegmentAt(pos.x, pos.y);
     if (seg) {
       const trace = seg.trace; const i = seg.segIdx;
-      const pts = trace.points;
-      const leftPts = pts.slice(0, i + 1);
-      const rightPts = pts.slice(i + 1);
+      const oldTraceData = {id: trace.id, points: trace.points.map(p=>({gx:p.gx,gy:p.gy})), color: trace.color, name: trace.name};
       const that = this;
       const cmd = new Command('橡皮擦-焊锡段', () => {
         that.model.remove(trace);
-        if (leftPts.length >= 2) that.model.addSolderTrace({id: uid(), points: leftPts.map(p=>({gx:p.gx,gy:p.gy})), color: trace.color, name: trace.name});
-        if (rightPts.length >= 2) that.model.addSolderTrace({id: uid(), points: rightPts.map(p=>({gx:p.gx,gy:p.gy})), color: trace.color, name: trace.name});
-        return {trace, leftPts, rightPts};
+        const leftPts = oldTraceData.points.slice(0, i + 1);
+        const rightPts = oldTraceData.points.slice(i + 1);
+        const ids = [];
+        if (leftPts.length >= 2) { const t = {id: uid(), points: leftPts, color: oldTraceData.color, name: oldTraceData.name}; that.model.addSolderTrace(t); ids.push(t.id); }
+        if (rightPts.length >= 2) { const t = {id: uid(), points: rightPts, color: oldTraceData.color, name: oldTraceData.name}; that.model.addSolderTrace(t); ids.push(t.id); }
+        return {oldTraceData, newIds: ids};
       }, (data) => {
-        for (const t of that.model.solderTraces) {
-          if (t.points === data.leftPts || t.points === data.rightPts) that.model.remove(t);
-        }
-        that.model.addSolderTrace(data.trace);
+        for (const id of data.newIds) { const t = that.model.solderTraces.find(tr => tr.id === id); if (t) that.model.remove(t); }
+        that.model.addSolderTrace({id: data.oldTraceData.id, points: data.oldTraceData.points, color: data.oldTraceData.color, name: data.oldTraceData.name});
       });
       this.cmdMgr.execute(cmd); this._autoSave(); return;
     }
     // 擦除飞线
     const fw = this.hitTester.flyWireAt(pos.x, pos.y);
     if (fw) {
+      const saved = {id: fw.id, from: {gx:fw.from.gx,gy:fw.from.gy}, to: {gx:fw.to.gx,gy:fw.to.gy}};
       const that = this;
-      const cmd = new Command('橡皮擦-飞线', () => { that.model.remove(fw); return {fw}; }, (data) => { that.model.addFlyWire(data.fw); });
+      const cmd = new Command('橡皮擦-飞线', () => { that.model.remove(fw); return {saved}; }, (data) => { that.model.addFlyWire(data.saved); });
       this.cmdMgr.execute(cmd); this._autoSave(); return;
     }
-    // 擦除器件
+    // 擦除器件（保存完整数据以可靠恢复）
     const comp = this.hitTester.componentAt(pos.x, pos.y);
     if (comp) {
+      const saved = JSON.parse(JSON.stringify(comp));
       const that = this;
-      const arr = this.model.arrayFor(comp);
-      const idx = arr ? arr.indexOf(comp) : -1;
-      const cmd = new Command('橡皮擦-器件', () => { that.model.remove(comp); return {comp, arr, idx}; }, (data) => { if (data.arr) data.arr.splice(data.idx, 0, data.obj); });
+      const cmd = new Command('橡皮擦-器件', () => {
+        that.model.remove(comp); return {saved};
+      }, (data) => {
+        that.model.addComponent(data.saved);
+      });
       this.cmdMgr.execute(cmd); this._autoSave(); return;
     }
     // 擦除编组成员
@@ -2256,8 +2261,8 @@ class App {
         const dx = c.gx + (c.w - 1) / 2 - cx;
         const dy = c.gy + (c.h - 1) / 2 - cy;
         const newCenterX = cx - dy, newCenterY = cy + dx;
-        const oldW = c.w;
-        c.w = c.h; c.h = oldW;
+        const oldW = c.w, oldH = c.h;
+        c.w = oldH; c.h = oldW;
         c.gx = Math.round(newCenterX - (c.w - 1) / 2);
         c.gy = Math.round(newCenterY - (c.h - 1) / 2);
         // 引脚标签跟随旋转: 旧(dx,dy)→新(oldH-1-dy, dx)
@@ -2265,7 +2270,7 @@ class App {
           const newLabels = {};
           for (const [key, label] of Object.entries(c.pinLabels)) {
             const [dx, dy] = key.split(',').map(Number);
-            newLabels[`${oldW - 1 - dy},${dx}`] = label;
+            newLabels[`${oldH - 1 - dy},${dx}`] = label;
           }
           c.pinLabels = newLabels;
         }
@@ -2473,6 +2478,14 @@ class App {
     const sel = this.selectedObject;
     // 处理 group
     if (sel && sel.componentIds) {
+      // 确保每次选中组都初始化拖拽数据
+      this._dragGroupStart = [];
+      for (const cid of sel.componentIds) {
+        const c = this.model.findById(cid);
+        if (!c) continue;
+        if (c.type === 'smd') this._dragGroupStart.push({comp:c, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
+        else this._dragGroupStart.push({comp:c, gx:c.gx, gy:c.gy});
+      }
       panel.style.display = 'block';
       document.getElementById('prop-name').value = sel.name || '';
       document.getElementById('prop-type').textContent = `器件组 (${sel.componentIds.length}个)`;
@@ -2633,8 +2646,16 @@ class App {
       // 焊锡线颜色/名称（支持完整走线或选中段）
       const traceObj = sel.points ? sel : (sel.trace ? sel.trace : null);
       if (traceObj) {
-        traceObj.name = newName;
-        traceObj.color = document.getElementById('prop-color').value;
+        const oldName = traceObj.name, oldColor = traceObj.color;
+        const newColor = document.getElementById('prop-color').value;
+        const that = this;
+        const cmd = new Command('修改焊锡属性', () => {
+          traceObj.name = newName; traceObj.color = newColor;
+          return {trace: traceObj, oldName, oldColor};
+        }, (data) => {
+          data.trace.name = data.oldName; data.trace.color = data.oldColor;
+        });
+        this.cmdMgr.execute(cmd);
       }
       // 组名称
       if (sel.componentIds && newName) { sel.name = newName; }
