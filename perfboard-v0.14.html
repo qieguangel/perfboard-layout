@@ -115,6 +115,7 @@ canvas { display:block; position:absolute; top:0; left:0; outline:none; }
     <button id="btn-header" title="放置排针/排座 (3)">▣ 排针</button>
     <button id="btn-flywire" title="放置飞线 (4)">∼ 飞线</button>
     <button id="btn-solder" title="焊锡走线 (5)">━ 焊锡</button>
+    <button id="btn-eraser" title="橡皮擦 (6)">⌫ 橡皮擦</button>
   </div>
   <span class="sep"></span>
   <div class="group">
@@ -1064,6 +1065,10 @@ class App {
       this._startHeaderPlace(pos);
       return;
     }
+    if (this.mode === 'eraser') {
+      this._eraserErase(pos);
+      return;
+    }
 
     // 选择模式
     // 检查是否点击了焊锡段
@@ -1151,6 +1156,15 @@ class App {
       this.offsetY = this.dragStartOffsetY + dy;
       this.isDragging = true;
       this._updateStatus();
+      return;
+    }
+
+    // 橡皮擦模式：长按拖拽连续擦除
+    if (this.mode === 'eraser' && this.mouseDown && this.mouseButton === 0) {
+      const elapsed = Date.now() - this.mouseDownTime;
+      if (elapsed >= LONG_PRESS_MS) {
+        this._eraserErase(pos);
+      }
       return;
     }
 
@@ -1482,10 +1496,11 @@ class App {
 
   _moveComponentToCursor(pos) {
     if (!this.dragMouseStart) return;
-    const gp = this.hitTester.nearestGridPoint(pos.x, pos.y);
-    if (!gp) return;
-    const dgx = gp.gx - this.dragMouseStart.gx;
-    const dgy = gp.gy - this.dragMouseStart.gy;
+    // 使用 screenToGrid 保证非格点处也能拖动
+    const raw = this.hitTester.screenToGrid(pos.x, pos.y);
+    if (!raw) return;
+    const dgx = raw.gx - this.dragMouseStart.gx;
+    const dgy = raw.gy - this.dragMouseStart.gy;
 
     // 组拖拽
     if (this._dragGroupStart) {
@@ -1905,6 +1920,7 @@ class App {
     if (e.key === '3') { this.setMode('header'); return; }
     if (e.key === '4') { this.setMode('flywire'); return; }
     if (e.key === '5') { this.setMode('solder'); return; }
+    if (e.key === '6') { this.setMode('eraser'); return; }
 
     // 焊锡模式下 Enter 完成当前走线
     if (e.key === 'Enter' && this.mode === 'solder' && this.routingState) {
@@ -2015,6 +2031,55 @@ class App {
       } else {
         comp.gx += dgx; comp.gy += dgy;
       }
+    }
+  }
+
+  // 橡皮擦模式：长按拖拽擦除
+  _eraserErase(pos) {
+    // 擦除焊锡段
+    const seg = this.hitTester.solderSegmentAt(pos.x, pos.y);
+    if (seg) {
+      const trace = seg.trace; const i = seg.segIdx;
+      const pts = trace.points;
+      const leftPts = pts.slice(0, i + 1);
+      const rightPts = pts.slice(i + 1);
+      const that = this;
+      const cmd = new Command('橡皮擦-焊锡段', () => {
+        that.model.remove(trace);
+        if (leftPts.length >= 2) that.model.addSolderTrace({id: uid(), points: leftPts.map(p=>({gx:p.gx,gy:p.gy})), color: trace.color, name: trace.name});
+        if (rightPts.length >= 2) that.model.addSolderTrace({id: uid(), points: rightPts.map(p=>({gx:p.gx,gy:p.gy})), color: trace.color, name: trace.name});
+        return {trace, leftPts, rightPts};
+      }, (data) => {
+        for (const t of that.model.solderTraces) {
+          if (t.points === data.leftPts || t.points === data.rightPts) that.model.remove(t);
+        }
+        that.model.addSolderTrace(data.trace);
+      });
+      this.cmdMgr.execute(cmd); this._autoSave(); return;
+    }
+    // 擦除飞线
+    const fw = this.hitTester.flyWireAt(pos.x, pos.y);
+    if (fw) {
+      const that = this;
+      const cmd = new Command('橡皮擦-飞线', () => { that.model.remove(fw); return {fw}; }, (data) => { that.model.addFlyWire(data.fw); });
+      this.cmdMgr.execute(cmd); this._autoSave(); return;
+    }
+    // 擦除器件
+    const comp = this.hitTester.componentAt(pos.x, pos.y);
+    if (comp) {
+      const that = this;
+      const arr = this.model.arrayFor(comp);
+      const idx = arr ? arr.indexOf(comp) : -1;
+      const cmd = new Command('橡皮擦-器件', () => { that.model.remove(comp); return {comp, arr, idx}; }, (data) => { if (data.arr) data.arr.splice(data.idx, 0, data.obj); });
+      this.cmdMgr.execute(cmd); this._autoSave(); return;
+    }
+    // 擦除编组成员
+    const gc = this._findGroupedComponentAt(pos.x, pos.y);
+    if (gc) {
+      const gid = gc.groupId;
+      for (const c of this.model.allComponents()) { if (c.groupId === gid) c.groupId = null; }
+      this.model.componentGroups = this.model.componentGroups.filter(g => g.id !== gid);
+      this._updateCompList(); this._autoSave();
     }
   }
 
@@ -2175,7 +2240,7 @@ class App {
       else { sumX += c.gx + (c.w - 1) / 2; sumY += c.gy + (c.h - 1) / 2; count++; }
     }
     if (count === 0) return;
-    const cx = Math.round(sumX / count), cy = Math.round(sumY / count);
+    const cx = sumX / count, cy = sumY / count; // 浮点中心，不取整
     const that = this;
     const oldStates = [];
     for (const c of this.model.allComponents()) {
@@ -2184,10 +2249,10 @@ class App {
         oldStates.push({comp: c, old: {gx1: c.gx1, gy1: c.gy1, gx2: c.gx2, gy2: c.gy2}});
         const dx1 = c.gx1 - cx, dy1 = c.gy1 - cy;
         const dx2 = c.gx2 - cx, dy2 = c.gy2 - cy;
-        c.gx1 = cx - dy1; c.gy1 = cy + dx1;
-        c.gx2 = cx - dy2; c.gy2 = cy + dx2;
+        c.gx1 = Math.round(cx - dy1); c.gy1 = Math.round(cy + dx1);
+        c.gx2 = Math.round(cx - dy2); c.gy2 = Math.round(cy + dx2);
       } else {
-        oldStates.push({comp: c, old: {gx: c.gx, gy: c.gy, w: c.w, h: c.h}});
+        oldStates.push({comp: c, old: {gx: c.gx, gy: c.gy, w: c.w, h: c.h, pinLabels: c.pinLabels ? JSON.parse(JSON.stringify(c.pinLabels)) : {}}});
         const dx = c.gx + (c.w - 1) / 2 - cx;
         const dy = c.gy + (c.h - 1) / 2 - cy;
         const newCenterX = cx - dy, newCenterY = cy + dx;
@@ -2337,20 +2402,19 @@ class App {
       else { sumX += c.gx + (c.w - 1) / 2; sumY += c.gy + (c.h - 1) / 2; count++; }
     }
     if (count === 0) return;
-    const cx = Math.round(sumX / count), cy = Math.round(sumY / count);
+    const cx = sumX / count, cy = sumY / count; // 浮点中心
     const that = this;
     const oldStates = [];
     for (const c of this.model.allComponents()) {
       if (!ids.includes(c.id)) continue;
       if (c.type === 'smd') {
         oldStates.push({comp: c, old: {gx1: c.gx1, gy1: c.gy1, gx2: c.gx2, gy2: c.gy2}});
-        if (dir === 'h') { c.gx1 = 2*cx - c.gx1; c.gx2 = 2*cx - c.gx2; }
-        else { c.gy1 = 2*cy - c.gy1; c.gy2 = 2*cy - c.gy2; }
+        if (dir === 'h') { c.gx1 = Math.round(2*cx - c.gx1); c.gx2 = Math.round(2*cx - c.gx2); }
+        else { c.gy1 = Math.round(2*cy - c.gy1); c.gy2 = Math.round(2*cy - c.gy2); }
       } else {
         oldStates.push({comp: c, old: {gx: c.gx, gy: c.gy, w: c.w, h: c.h, pinLabels: c.pinLabels ? JSON.parse(JSON.stringify(c.pinLabels)) : {}}});
         if (dir === 'h') {
-          c.gx = 2*cx - (c.gx + c.w - 1);
-          // 水平翻转引脚标签: (dx,dy)→(w-1-dx, dy)
+          c.gx = Math.round(2*cx - (c.gx + c.w - 1));
           if (c.pinLabels) {
             const newLabels = {};
             for (const [key, label] of Object.entries(c.pinLabels)) {
@@ -2360,8 +2424,7 @@ class App {
             c.pinLabels = newLabels;
           }
         } else {
-          c.gy = 2*cy - (c.gy + c.h - 1);
-          // 垂直翻转引脚标签: (dx,dy)→(dx, h-1-dy)
+          c.gy = Math.round(2*cy - (c.gy + c.h - 1));
           if (c.pinLabels) {
             const newLabels = {};
             for (const [key, label] of Object.entries(c.pinLabels)) {
@@ -2399,7 +2462,7 @@ class App {
 
   _updateModeButtons() {
     document.querySelectorAll('#toolbar .group:first-child button').forEach(b => b.classList.remove('active'));
-    const map = {select:'btn-select', smd:'btn-smd', header:'btn-header', flywire:'btn-flywire', solder:'btn-solder'};
+    const map = {select:'btn-select', smd:'btn-smd', header:'btn-header', flywire:'btn-flywire', solder:'btn-solder', eraser:'btn-eraser'};
     const btn = document.getElementById(map[this.mode]);
     if (btn) btn.classList.add('active');
   }
@@ -2418,15 +2481,16 @@ class App {
       document.getElementById('prop-color-row').style.display = 'none';
       return;
     }
-    // 处理 trace
-    if (sel && sel.points) {
+    // 处理 trace（完整走线或选中段）
+    const traceObj = (sel && sel.points) ? sel : (sel && sel.trace) ? sel.trace : null;
+    if (traceObj) {
       panel.style.display = 'block';
-      document.getElementById('prop-name').value = sel.name || '';
-      document.getElementById('prop-type').textContent = '焊锡走线';
-      document.getElementById('prop-pos').textContent = `${sel.points.length} 个节点`;
+      document.getElementById('prop-name').value = traceObj.name || '';
+      document.getElementById('prop-type').textContent = `焊锡走线 (${traceObj.points.length}节点)`;
+      document.getElementById('prop-pos').textContent = sel.trace ? `已选第${sel.segIdx+1}段` : '完整走线';
       document.getElementById('prop-pins-row').style.display = 'none';
       document.getElementById('prop-color-row').style.display = 'flex';
-      document.getElementById('prop-color').value = sel.color || '#e94560';
+      document.getElementById('prop-color').value = traceObj.color || '#e94560';
       return;
     }
     // 处理多选
@@ -2516,7 +2580,7 @@ class App {
 
   _updateStatus() {
     document.getElementById('status-mode').textContent =
-      `模式: ${{select:'选择', smd:'贴片', header:'排针', flywire:'飞线', solder:'焊锡'}[this.mode]}`;
+      `模式: ${{select:'选择', smd:'贴片', header:'排针', flywire:'飞线', solder:'焊锡', eraser:'橡皮擦'}[this.mode]}`;
     const gp = this.highlightedGridPoint;
     document.getElementById('status-pos').textContent = gp
       ? `格点: (${gp.gx}, ${gp.gy})` : '坐标: -';
@@ -2526,7 +2590,8 @@ class App {
       smd: '点击相邻两个格点放置贴片器件 | Esc取消',
       header: '拖动矩形区域放置排针/排座 | Esc取消',
       flywire: '点击两个格点创建飞线 | Esc取消',
-      solder: '点击格点添加路径点 | Enter完成 | Esc取消',
+      solder: '双击开始 | 单击固定段 | 双击结束 | Enter完成',
+      eraser: '长按左键拖拽擦除器件/焊锡段',
     };
     document.getElementById('status-hint').textContent = hints[this.mode] || '';
   }
@@ -2538,6 +2603,7 @@ class App {
     document.getElementById('btn-header').addEventListener('click', () => this.setMode('header'));
     document.getElementById('btn-flywire').addEventListener('click', () => this.setMode('flywire'));
     document.getElementById('btn-solder').addEventListener('click', () => this.setMode('solder'));
+    document.getElementById('btn-eraser').addEventListener('click', () => this.setMode('eraser'));
     document.getElementById('btn-undo').addEventListener('click', () => this.undo());
     document.getElementById('btn-redo').addEventListener('click', () => this.redo());
     document.getElementById('btn-delete').addEventListener('click', () => this.deleteSelected());
@@ -2564,8 +2630,11 @@ class App {
       const newName = document.getElementById('prop-name').value.trim();
       if (newName) { sel.name = newName; }
       // 焊锡线颜色
-      if (sel.points) {
-        sel.color = document.getElementById('prop-color').value;
+      // 焊锡线颜色/名称（支持完整走线或选中段）
+      const traceObj = sel.points ? sel : (sel.trace ? sel.trace : null);
+      if (traceObj) {
+        traceObj.name = newName;
+        traceObj.color = document.getElementById('prop-color').value;
       }
       // 组名称
       if (sel.componentIds && newName) { sel.name = newName; }
