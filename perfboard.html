@@ -5,61 +5,129 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>洞洞板布局工具</title>
 <style>
+:root {
+  --bg: #1a1a2e;
+  --bg2: #16213e;
+  --border: #0f3460;
+  --text: #e0e0e0;
+  --text2: #999;
+  --accent: #e94560;
+  --grid-dot: #444;
+  --btn-bg: #1a1a2e;
+  --btn-text: #ccc;
+  --panel-bg: #16213e;
+}
+:root.light {
+  --bg: #f5f5f5;
+  --bg2: #e8e8e8;
+  --border: #ccc;
+  --text: #333;
+  --text2: #666;
+  --accent: #d63031;
+  --grid-dot: #bbb;
+  --btn-bg: #e8e8e8;
+  --btn-text: #333;
+  --panel-bg: #e8e8e8;
+}
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
   font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-  background: #1a1a2e; color: #e0e0e0;
+  background: var(--bg); color: var(--text);
   display:flex; flex-direction:column; height:100vh; overflow:hidden;
   user-select:none; -webkit-user-select:none;
 }
 #toolbar {
   display:flex; align-items:center; gap:6px; padding:6px 10px;
-  background:#16213e; border-bottom:1px solid #0f3460;
+  background:var(--bg2); border-bottom:1px solid var(--border);
   flex-shrink:0; flex-wrap:wrap;
 }
 #toolbar button {
-  padding:5px 10px; border:1px solid #0f3460; border-radius:4px;
-  background:#1a1a2e; color:#ccc; cursor:pointer; font-size:12px;
+  padding:5px 10px; border:1px solid var(--border); border-radius:4px;
+  background:var(--btn-bg); color:var(--btn-text); cursor:pointer; font-size:12px;
   white-space:nowrap; transition:all 0.15s;
 }
-#toolbar button:hover { background:#0f3460; color:#fff; }
-#toolbar button.active { background:#e94560; border-color:#e94560; color:#fff; }
-#toolbar .sep { width:1px; height:20px; background:#0f3460; margin:0 4px; }
+#toolbar button:hover { background:var(--border); color:#fff; }
+#toolbar button.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+#toolbar .sep { width:1px; height:20px; background:var(--border); margin:0 4px; }
 #toolbar .group { display:flex; gap:2px; }
-#toolbar label { font-size:11px; color:#999; margin-left:4px; }
+#toolbar label { font-size:11px; color:var(--text2); margin-left:4px; }
 #toolbar input[type=range] { width:80px; }
 #main-area { display:flex; flex:1; overflow:hidden; }
 #sidebar {
-  width:200px; background:#16213e; border-right:1px solid #0f3460;
+  width:200px; background:var(--bg2); border-right:1px solid var(--border);
   display:flex; flex-direction:column; flex-shrink:0; overflow-y:auto;
 }
-#sidebar h3 { padding:8px 10px; font-size:13px; color:#999; border-bottom:1px solid #0f3460; }
+#sidebar h3 { padding:8px 10px; font-size:13px; color:var(--text2); border-bottom:1px solid var(--border); }
 #sidebar .comp-item {
-  padding:6px 10px; cursor:pointer; font-size:12px; border-bottom:1px solid #1a1a2e;
+  padding:6px 10px; cursor:pointer; font-size:12px; border-bottom:1px solid var(--bg);
   transition:background 0.15s;
 }
-#sidebar .comp-item:hover { background:#1a1a2e; }
-#sidebar .comp-item.selected { background:#0f3460; color:#e94560; }
+#sidebar .comp-item:hover { background:var(--bg); }
+#sidebar .comp-item.selected { background:var(--border); color:var(--accent); }
 #canvas-wrap { flex:1; position:relative; overflow:hidden; }
 canvas { display:block; position:absolute; top:0; left:0; outline:none; }
 #statusbar {
-  height:24px; background:#16213e; border-top:1px solid #0f3460;
+  height:24px; background:var(--bg2); border-top:1px solid var(--border);
   display:flex; align-items:center; padding:0 10px; font-size:11px;
-  color:#888; gap:16px; flex-shrink:0;
+  color:var(--text2); gap:16px; flex-shrink:0;
 }
+#statusbar span { display:inline-block; white-space:nowrap; }
+#status-mode { width:90px; }
+#status-pos { width:140px; }
+#status-zoom { width:70px; }
+#status-hint { flex:1; text-align:right; }
 #prop-panel {
   position:absolute; right:10px; top:50px; width:220px;
-  background:#16213e; border:1px solid #0f3460; border-radius:6px;
+  background:var(--bg2); border:1px solid var(--border); border-radius:6px;
   padding:10px; font-size:12px; display:none; z-index:10;
 }
-#prop-panel h4 { margin-bottom:8px; color:#e94560; }
+#prop-panel h4 { margin-bottom:8px; color:var(--accent); }
 #prop-panel .row { display:flex; align-items:center; margin-bottom:4px; gap:6px; }
-#prop-panel .row label { width:50px; color:#999; flex-shrink:0; }
+#prop-panel .row label { width:50px; color:var(--text2); flex-shrink:0; }
 #prop-panel .row input {
-  flex:1; background:#1a1a2e; border:1px solid #0f3460; color:#ccc;
+  flex:1; background:var(--bg); border:1px solid var(--border); color:var(--text);
   padding:3px 6px; border-radius:3px; font-size:11px;
 }
-#prop-panel button { margin-top:6px; padding:3px 10px; background:#e94560; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px; }
+#prop-panel button { margin-top:6px; padding:3px 10px; background:var(--accent); color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px; }
+#help-overlay, #dialog-overlay {
+  display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.6); z-index:100; justify-content:center; align-items:center;
+}
+#help-overlay.show, #dialog-overlay.show { display:flex; }
+#help-panel, .dialog-panel {
+  background:var(--bg2); border:1px solid var(--border); border-radius:8px;
+  padding:16px 20px; max-width:500px; width:90%; color:var(--text); font-size:12px;
+}
+#help-panel h3, .dialog-panel h3 { color:var(--accent); margin-bottom:10px; }
+#help-panel table { width:100%; border-collapse:collapse; }
+#help-panel td { padding:3px 8px; border-bottom:1px solid var(--bg); }
+#help-panel td:first-child { color:#f39c12; white-space:nowrap; font-family:monospace; width:40%; }
+#help-panel .close-btn, .dialog-panel .close-btn { float:right; background:none; border:none; color:var(--text2); cursor:pointer; font-size:18px; }
+#help-panel .close-btn:hover, .dialog-panel .close-btn:hover { color:var(--text); }
+.dialog-panel .row { display:flex; gap:6px; align-items:center; margin-bottom:8px; }
+.dialog-panel .row input {
+  flex:1; background:var(--bg); border:1px solid var(--border); color:var(--text);
+  padding:5px 8px; border-radius:4px; font-size:12px;
+}
+.dialog-panel .btn-row { display:flex; gap:6px; justify-content:flex-end; }
+.dialog-panel .btn-row button {
+  padding:5px 14px; border:1px solid var(--border); border-radius:4px;
+  background:var(--bg); color:var(--btn-text); cursor:pointer; font-size:12px;
+}
+.dialog-panel .btn-row button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+#file-list { max-height:200px; overflow-y:auto; margin-bottom:8px; }
+#file-list .file-row {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:4px 8px; cursor:pointer; border-bottom:1px solid var(--bg); font-size:12px;
+}
+#file-list .file-row:hover { background:var(--bg); }
+#file-list .file-row.current { color:var(--accent); font-weight:bold; }
+#file-list .file-row .del-btn { color:var(--text2); cursor:pointer; font-size:14px; }
+#file-list .file-row .del-btn:hover { color:var(--accent); }
+#theme-toggle {
+  padding:4px 8px; font-size:16px; cursor:pointer; background:none; border:1px solid var(--border);
+  border-radius:4px; line-height:1;
+}
 </style>
 </head>
 <body>
@@ -70,7 +138,7 @@ canvas { display:block; position:absolute; top:0; left:0; outline:none; }
     <button id="btn-smd" title="放置贴片器件 (2)">◧ 贴片</button>
     <button id="btn-header" title="放置排针/排座 (3)">▣ 排针</button>
     <button id="btn-flywire" title="放置飞线 (4)">∼ 飞线</button>
-    <button id="btn-solder" title="焊锡走线 (S)">━ 焊锡</button>
+    <button id="btn-solder" title="焊锡走线 (5)">━ 焊锡</button>
   </div>
   <span class="sep"></span>
   <div class="group">
@@ -89,6 +157,12 @@ canvas { display:block; position:absolute; top:0; left:0; outline:none; }
   <input type="range" id="grid-size" min="15" max="40" value="25" title="网格大小">
   <span id="grid-label">25</span>
   <span class="sep"></span>
+  <button id="btn-help" title="快捷键说明">?</button>
+  <button id="btn-theme" title="切换浅色/深色模式">🌓</button>
+  <span class="sep"></span>
+  <select id="file-selector" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 6px;border-radius:4px;font-size:11px;max-width:120px;"></select>
+  <button id="btn-newfile" title="新建文件">+新建</button>
+  <button id="btn-saveas" title="另存为">💾 另存</button>
   <button id="btn-export">📥 导出</button>
   <button id="btn-import">📤 导入</button>
   <input type="file" id="import-file" accept=".json" style="display:none">
@@ -109,6 +183,44 @@ canvas { display:block; position:absolute; top:0; left:0; outline:none; }
   <div class="row" id="prop-pos-row"><label>位置</label><span id="prop-pos"></span></div>
   <div id="prop-pins-row" style="display:none"><label style="color:#999;margin-bottom:4px;">引脚标签 (双击画布上引脚编辑)</label><div id="prop-pins" style="font-size:10px;color:#aaa;max-height:100px;overflow-y:auto;"></div></div>
   <button id="prop-apply">应用</button>
+</div>
+
+<div id="help-overlay" onclick="if(event.target===this) this.classList.remove('show')">
+  <div id="help-panel">
+    <button class="close-btn" onclick="document.getElementById('help-overlay').classList.remove('show')">&times;</button>
+    <h3>快捷键说明</h3>
+    <table>
+      <tr><td>1 / 2 / 3 / 4 / 5</td><td>切换模式：选择 / 贴片 / 排针 / 飞线 / 焊锡</td></tr>
+      <tr><td>滚轮</td><td>缩放画布</td></tr>
+      <tr><td>右键拖动</td><td>平移画布</td></tr>
+      <tr><td>左键短按</td><td>选中器件 / 焊锡段 / 飞线</td></tr>
+      <tr><td>左键长按器件</td><td>拖动移动器件</td></tr>
+      <tr><td>左键长按格点</td><td>拖动走焊锡线</td></tr>
+      <tr><td>左键双击器件</td><td>编辑器件名称</td></tr>
+      <tr><td>左键双击排针引脚</td><td>标注引脚标签</td></tr>
+      <tr><td>焊锡模式 Enter</td><td>完成当前焊锡走线</td></tr>
+      <tr><td>Ctrl+Z / Ctrl+Y</td><td>撤销 / 重做</td></tr>
+      <tr><td>Ctrl+C / Ctrl+V / Ctrl+X</td><td>复制 / 粘贴 / 剪切</td></tr>
+      <tr><td>Ctrl+R</td><td>旋转选中器件 90°</td></tr>
+      <tr><td>Ctrl+S</td><td>导出 JSON 文件</td></tr>
+      <tr><td>H / V</td><td>水平 / 垂直翻转选中器件</td></tr>
+      <tr><td>Delete</td><td>删除选中对象</td></tr>
+      <tr><td>Escape</td><td>取消当前操作 / 取消选中</td></tr>
+    </table>
+  </div>
+</div>
+
+<div id="dialog-overlay" onclick="if(event.target===this) this.classList.remove('show')">
+  <div class="dialog-panel">
+    <button class="close-btn" onclick="document.getElementById('dialog-overlay').classList.remove('show')">&times;</button>
+    <h3 id="dialog-title">另存为</h3>
+    <div class="row"><input id="dialog-input" placeholder="输入文件名..."></div>
+    <div id="file-list"></div>
+    <div class="btn-row">
+      <button onclick="document.getElementById('dialog-overlay').classList.remove('show')">取消</button>
+      <button class="primary" id="dialog-ok">确定</button>
+    </div>
+  </div>
 </div>
 
 <div id="statusbar">
@@ -293,7 +405,8 @@ class HitTester {
 
   // 找点击位置的焊锡段
   solderSegmentAt(sx, sy) {
-    let best = null, bestDist = SEG_HIT_DIST;
+    const hitDist = Math.max(8, this.gridSize * this.zoom * 0.25);
+    let best = null, bestDist = hitDist;
     for (const trace of this.model.solderTraces) {
       for (let i = 0; i < trace.points.length - 1; i++) {
         const a = this.gridToScreen(trace.points[i].gx, trace.points[i].gy);
@@ -307,7 +420,8 @@ class HitTester {
 
   // 找点击位置的飞线
   flyWireAt(sx, sy) {
-    let best = null, bestDist = SEG_HIT_DIST;
+    const hitDist = Math.max(8, this.gridSize * this.zoom * 0.25);
+    let best = null, bestDist = hitDist;
     for (const fw of this.model.flyWires) {
       const a = this.gridToScreen(fw.from.gx, fw.from.gy);
       const b = this.gridToScreen(fw.to.gx, fw.to.gy);
@@ -399,33 +513,32 @@ class Renderer {
     const ctx = this.ctx;
     const W = this.canvas.width / this.dpr;
     const H = this.canvas.height / this.dpr;
+    const light = this.app._isLight;
     ctx.clearRect(0, 0, W, H);
 
-    // 背景
-    ctx.fillStyle = '#1a1a2e';
+    ctx.fillStyle = light ? '#f5f5f5' : '#1a1a2e';
     ctx.fillRect(0, 0, W, H);
 
-    this._drawGrid(W, H);
+    this._drawGrid(W, H, light);
     this._drawFlyWires();
     this._drawSolderTraces();
-    this._drawSMDComponents();
-    this._drawHeaderComponents();
+    this._drawSMDComponents(light);
+    this._drawHeaderComponents(light);
     this._drawSelectionHighlight();
     this._drawTempElements();
   }
 
-  _drawGrid(W, H) {
+  _drawGrid(W, H, light) {
     const ctx = this.ctx;
     const gs = this.gridSize * this.zoom;
-    if (gs < 6) return; // 太小不画
+    if (gs < 6) return;
 
-    // 计算可见格点范围
     const gxMin = Math.floor(-this.ox / gs) - 1;
     const gxMax = Math.ceil((W - this.ox) / gs) + 1;
     const gyMin = Math.floor(-this.oy / gs) - 1;
     const gyMax = Math.ceil((H - this.oy) / gs) + 1;
 
-    ctx.fillStyle = '#444';
+    ctx.fillStyle = light ? '#ccc' : '#444';
     const dotR = Math.max(1, gs * 0.06);
     for (let gx = gxMin; gx <= gxMax; gx++) {
       for (let gy = gyMin; gy <= gyMax; gy++) {
@@ -501,7 +614,7 @@ class Renderer {
     }
   }
 
-  _drawSMDComponents() {
+  _drawSMDComponents(light) {
     const ctx = this.ctx;
     const gs = this.gridSize * this.zoom;
     for (const comp of this.model.smdComponents) {
@@ -512,16 +625,15 @@ class Renderer {
       const bw = isH ? gs * 0.85 : gs * 0.3;
       const bh = isH ? gs * 0.3 : gs * 0.85;
 
-      ctx.fillStyle = '#3498db';
-      ctx.strokeStyle = '#2980b9';
+      ctx.fillStyle = light ? '#2980b9' : '#3498db';
+      ctx.strokeStyle = '#2471a3';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.roundRect(cx - bw/2, cy - bh/2, bw, bh, 3);
       ctx.fill();
       ctx.stroke();
 
-      // 名称
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = light ? '#fff' : '#fff';
       ctx.font = `${Math.max(10, gs * 0.35)}px "Microsoft YaHei", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
@@ -529,27 +641,25 @@ class Renderer {
     }
   }
 
-  _drawHeaderComponents() {
+  _drawHeaderComponents(light) {
     const ctx = this.ctx;
     const gs = this.gridSize * this.zoom;
     for (const comp of this.model.headerComponents) {
       const p = this.gridToScreen(comp.gx, comp.gy);
-      const w = comp.w * gs;
-      const h = comp.h * gs;
+      const w = (comp.w - 1) * gs;
+      const h = (comp.h - 1) * gs;
       const margin = gs * 0.35;
 
-      // 外框
-      ctx.strokeStyle = '#2ecc71';
+      const color = light ? '#1e8449' : '#2ecc71';
+      ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.setLineDash([]);
       ctx.strokeRect(p.sx - margin, p.sy - margin, w + margin*2, h + margin*2);
 
-      // 填充
-      ctx.fillStyle = 'rgba(46, 204, 113, 0.1)';
+      ctx.fillStyle = light ? 'rgba(30,132,73,0.08)' : 'rgba(46,204,113,0.1)';
       ctx.fillRect(p.sx - margin, p.sy - margin, w + margin*2, h + margin*2);
 
-      // 引脚点
-      ctx.fillStyle = '#2ecc71';
+      ctx.fillStyle = color;
       for (let dx = 0; dx < comp.w; dx++) {
         for (let dy = 0; dy < comp.h; dy++) {
           const gsx = (comp.gx + dx) * gs + this.ox;
@@ -560,15 +670,13 @@ class Renderer {
         }
       }
 
-      // 名称
-      ctx.fillStyle = '#2ecc71';
+      ctx.fillStyle = color;
       ctx.font = `bold ${Math.max(10, gs * 0.35)}px "Microsoft YaHei", sans-serif`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
       ctx.fillText(comp.name, p.sx - margin, p.sy - margin - 4);
 
-      // 引脚标签
-      ctx.fillStyle = '#aaa';
+      ctx.fillStyle = light ? '#666' : '#aaa';
       ctx.font = `${Math.max(8, gs * 0.25)}px "Microsoft YaHei", sans-serif`;
       for (let dx = 0; dx < comp.w; dx++) {
         for (let dy = 0; dy < comp.h; dy++) {
@@ -606,9 +714,10 @@ class Renderer {
       ctx.setLineDash([]);
     } else if (sel.type === 'header') {
       const p = this.gridToScreen(sel.gx, sel.gy);
-      const w = sel.w * this.gridSize * this.zoom;
-      const h = sel.h * this.gridSize * this.zoom;
-      const m = this.gridSize * this.zoom * 0.35 + 3;
+      const gs = this.gridSize * this.zoom;
+      const w = (sel.w - 1) * gs;
+      const h = (sel.h - 1) * gs;
+      const m = gs * 0.35 + 3;
       ctx.strokeStyle = '#f39c12';
       ctx.lineWidth = 2.5;
       ctx.setLineDash([dashLen, dashLen]);
@@ -744,6 +853,7 @@ class App {
     this.dragStartOffsetX = 0;
     this.dragStartOffsetY = 0;
     this.dragCompStart = null;
+    this.dragMouseStart = null;
     this.dragSegInfo = null;
     this.dragSegStartPoints = null;
 
@@ -757,6 +867,17 @@ class App {
 
     // 剪贴板
     this.clipboard = null;
+
+    // 器件名称计数器
+    this._smdCounter = 0;
+    this._headerCounter = 0;
+
+    // 文件管理
+    this._currentFile = '未命名';
+    this._fileList = [];
+
+    // 主题
+    this._isLight = false;
 
     this._init();
   }
@@ -865,6 +986,9 @@ class App {
       this.dragCompStart = comp.type === 'smd'
         ? {gx1: comp.gx1, gy1: comp.gy1, gx2: comp.gx2, gy2: comp.gy2}
         : {gx: comp.gx, gy: comp.gy};
+      // 记录拖拽起始格点（用于delta计算，避免偏移问题）
+      const gp = this.hitTester.nearestGridPoint(pos.x, pos.y);
+      this.dragMouseStart = gp ? {gx: gp.gx, gy: gp.gy} : {gx: 0, gy: 0};
       this._updatePropPanel();
       this._updateCompList();
       return;
@@ -1226,23 +1350,23 @@ class App {
 
   // ==================== 器件移动 ====================
   _moveComponentToCursor(pos) {
-    if (!this.selectedObject || !this.dragCompStart) return;
+    if (!this.selectedObject || !this.dragCompStart || !this.dragMouseStart) return;
     const gp = this.hitTester.nearestGridPoint(pos.x, pos.y);
     if (!gp) return;
 
     const comp = this.selectedObject;
     const start = this.dragCompStart;
+    const dgx = gp.gx - this.dragMouseStart.gx;
+    const dgy = gp.gy - this.dragMouseStart.gy;
 
     if (comp.type === 'smd') {
-      const dgx = gp.gx - Math.round((start.gx1 + start.gx2) / 2);
-      const dgy = gp.gy - Math.round((start.gy1 + start.gy2) / 2);
       comp.gx1 = start.gx1 + dgx;
       comp.gy1 = start.gy1 + dgy;
       comp.gx2 = start.gx2 + dgx;
       comp.gy2 = start.gy2 + dgy;
     } else if (comp.type === 'header') {
-      comp.gx = start.gx + (gp.gx - start.gx);
-      comp.gy = start.gy + (gp.gy - start.gy);
+      comp.gx = start.gx + dgx;
+      comp.gy = start.gy + dgy;
     }
     this._updatePropPanel();
   }
@@ -1283,6 +1407,7 @@ class App {
 
     this.cmdMgr.execute(cmd);
     this.dragCompStart = null;
+    this.dragMouseStart = null;
     this._updatePropPanel();
     this._updateCompList();
     this._autoSave();
@@ -1306,13 +1431,13 @@ class App {
       return;
     }
 
+    const that = this;
     const comp = {
       id: uid(), type: 'smd',
-      name: 'R?',
+      name: `R${that._smdCounter++}`,
       gx1: this.smdStart.gx, gy1: this.smdStart.gy,
       gx2: gp.gx, gy2: gp.gy,
     };
-    const that = this;
 
     const cmd = new Command('放置贴片器件', () => {
       that.model.addComponent(comp);
@@ -1398,16 +1523,16 @@ class App {
 
   _finishHeaderPlace() {
     if (!this.headerPreview) return;
+    const that = this;
     const comp = {
       id: uid(), type: 'header',
-      name: 'J?',
+      name: `J${that._headerCounter++}`,
       gx: this.headerPreview.gx,
       gy: this.headerPreview.gy,
       w: this.headerPreview.w,
       h: this.headerPreview.h,
       pinLabels: {},
     };
-    const that = this;
 
     const cmd = new Command('放置排针/排座', () => {
       that.model.addComponent(comp);
@@ -1439,6 +1564,7 @@ class App {
     if (ctrl && e.key === 'v') { e.preventDefault(); this.paste(); return; }
     if (ctrl && e.key === 'x') { e.preventDefault(); this.cut(); return; }
     if (ctrl && e.key === 'r') { e.preventDefault(); this.rotateComponent(); return; }
+    if (ctrl && e.key === 's') { e.preventDefault(); this._showSaveDialog(); return; }
 
     if (e.key === 'h' || e.key === 'H') { e.preventDefault(); this.flipHorizontal(); return; }
     if (e.key === 'v' || e.key === 'V') { e.preventDefault(); this.flipVertical(); return; }
@@ -1449,7 +1575,7 @@ class App {
     if (e.key === '2') { this.setMode('smd'); return; }
     if (e.key === '3') { this.setMode('header'); return; }
     if (e.key === '4') { this.setMode('flywire'); return; }
-    if (e.key === 's' || e.key === 'S') { this.setMode('solder'); return; }
+    if (e.key === '5') { this.setMode('solder'); return; }
 
     // 焊锡模式下 Enter 完成当前走线
     if (e.key === 'Enter' && this.mode === 'solder' && this.routingState && this.routingState.points.length >= 2) {
@@ -1467,6 +1593,7 @@ class App {
     this.dragSegInfo = null;
     this.dragSegStartPoints = null;
     this.dragCompStart = null;
+    this.dragMouseStart = null;
     this.selectedObject = null;
     this.isDragging = false;
     this.mouseDown = false;
@@ -1515,6 +1642,16 @@ class App {
     this._updatePropPanel();
     this._updateCompList();
     this._autoSave();
+  }
+
+  exportJSON() {
+    const data = JSON.stringify(this.model.toJSON(), null, 2);
+    const blob = new Blob([data], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'perfboard-layout.json'; a.click();
+    URL.revokeObjectURL(url);
+    document.getElementById('status-hint').textContent = '已导出';
   }
 
   deleteSelected() {
@@ -1570,20 +1707,31 @@ class App {
   }
 
   _rotateHeader(comp) {
-    const old = {gx: comp.gx, gy: comp.gy, w: comp.w, h: comp.h};
+    const oldW = comp.w, oldH = comp.h;
+    const oldLabels = comp.pinLabels ? JSON.parse(JSON.stringify(comp.pinLabels)) : {};
+    const old = {gx: comp.gx, gy: comp.gy, w: comp.w, h: comp.h, pinLabels: oldLabels};
     const that = this;
 
     const cmd = new Command('旋转器件', () => {
       const cx = comp.gx + Math.floor(comp.w/2);
       const cy = comp.gy + Math.floor(comp.h/2);
-      comp.w = old.h;
-      comp.h = old.w;
+      comp.w = oldH;
+      comp.h = oldW;
       comp.gx = cx - Math.floor(comp.w/2);
       comp.gy = cy - Math.floor(comp.h/2);
-      return {comp, old};
+      // 变换引脚标签：旧(dx,dy) → 新(h-1-dy, dx)
+      const newLabels = {};
+      for (const [key, label] of Object.entries(oldLabels)) {
+        const [dx, dy] = key.split(',').map(Number);
+        const newKey = `${oldH - 1 - dy},${dx}`;
+        newLabels[newKey] = label;
+      }
+      comp.pinLabels = newLabels;
+      return {comp, old: {...old, pinLabels: oldLabels}};
     }, (data) => {
       data.comp.gx = data.old.gx; data.comp.gy = data.old.gy;
       data.comp.w = data.old.w; data.comp.h = data.old.h;
+      data.comp.pinLabels = data.old.pinLabels;
     });
     this.cmdMgr.execute(cmd);
     this._autoSave();
@@ -1595,18 +1743,32 @@ class App {
 
     if (sel.type === 'smd') {
       const old = {gx1: sel.gx1, gy1: sel.gy1, gx2: sel.gx2, gy2: sel.gy2};
-      const cx = Math.round((sel.gx1 + sel.gx2) / 2);
-      const that = this;
+      const cx = (sel.gx1 + sel.gx2) / 2;
       const cmd = new Command('水平翻转', () => {
-        sel.gx1 = 2*cx - old.gx1;
-        sel.gx2 = 2*cx - old.gx2;
+        sel.gx1 = Math.round(2*cx - old.gx1);
+        sel.gx2 = Math.round(2*cx - old.gx2);
         return {comp: sel, old};
       }, (data) => {
         data.comp.gx1 = data.old.gx1; data.comp.gx2 = data.old.gx2;
+        data.comp.gy1 = data.old.gy1; data.comp.gy2 = data.old.gy2;
       });
       this.cmdMgr.execute(cmd);
+      document.getElementById('status-hint').textContent = '已水平翻转';
     } else if (sel.type === 'header') {
-      // 水平翻转不用做（矩形对称）
+      const old = {gx: sel.gx, gy: sel.gy, w: sel.w, h: sel.h, pinLabels: sel.pinLabels ? JSON.parse(JSON.stringify(sel.pinLabels)) : {}};
+      const cmd = new Command('水平翻转', () => {
+        const newLabels = {};
+        for (const [key, label] of Object.entries(old.pinLabels)) {
+          const [dx, dy] = key.split(',').map(Number);
+          newLabels[`${sel.w - 1 - dx},${dy}`] = label;
+        }
+        sel.pinLabels = newLabels;
+        return {comp: sel, old};
+      }, (data) => {
+        data.comp.pinLabels = data.old.pinLabels;
+      });
+      this.cmdMgr.execute(cmd);
+      document.getElementById('status-hint').textContent = '已水平翻转（标签已更新）';
     }
     this._autoSave();
   }
@@ -1617,18 +1779,32 @@ class App {
 
     if (sel.type === 'smd') {
       const old = {gx1: sel.gx1, gy1: sel.gy1, gx2: sel.gx2, gy2: sel.gy2};
-      const cy = Math.round((sel.gy1 + sel.gy2) / 2);
-      const that = this;
+      const cy = (sel.gy1 + sel.gy2) / 2;
       const cmd = new Command('垂直翻转', () => {
-        sel.gy1 = 2*cy - old.gy1;
-        sel.gy2 = 2*cy - old.gy2;
+        sel.gy1 = Math.round(2*cy - old.gy1);
+        sel.gy2 = Math.round(2*cy - old.gy2);
         return {comp: sel, old};
       }, (data) => {
+        data.comp.gx1 = data.old.gx1; data.comp.gx2 = data.old.gx2;
         data.comp.gy1 = data.old.gy1; data.comp.gy2 = data.old.gy2;
       });
       this.cmdMgr.execute(cmd);
+      document.getElementById('status-hint').textContent = '已垂直翻转';
     } else if (sel.type === 'header') {
-      // 垂直翻转不用做（矩形对称）
+      const old = {gx: sel.gx, gy: sel.gy, w: sel.w, h: sel.h, pinLabels: sel.pinLabels ? JSON.parse(JSON.stringify(sel.pinLabels)) : {}};
+      const cmd = new Command('垂直翻转', () => {
+        const newLabels = {};
+        for (const [key, label] of Object.entries(old.pinLabels)) {
+          const [dx, dy] = key.split(',').map(Number);
+          newLabels[`${dx},${sel.h - 1 - dy}`] = label;
+        }
+        sel.pinLabels = newLabels;
+        return {comp: sel, old};
+      }, (data) => {
+        data.comp.pinLabels = data.old.pinLabels;
+      });
+      this.cmdMgr.execute(cmd);
+      document.getElementById('status-hint').textContent = '已垂直翻转（标签已更新）';
     }
     this._autoSave();
   }
@@ -1764,14 +1940,11 @@ class App {
       gridLabel.textContent = this.gridSize;
     });
 
-    document.getElementById('btn-export').addEventListener('click', () => {
-      const data = JSON.stringify(this.model.toJSON(), null, 2);
-      const blob = new Blob([data], {type:'application/json'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'perfboard-layout.json'; a.click();
-      URL.revokeObjectURL(url);
+    document.getElementById('btn-help').addEventListener('click', () => {
+      document.getElementById('help-overlay').classList.toggle('show');
     });
+
+    document.getElementById('btn-export').addEventListener('click', () => this.exportJSON());
 
     document.getElementById('btn-import').addEventListener('click', () => {
       document.getElementById('import-file').click();
@@ -1807,22 +1980,196 @@ class App {
         this._autoSave();
       }
     });
+
+    // 主题切换
+    document.getElementById('btn-theme').addEventListener('click', () => this._toggleTheme());
+
+    // 文件管理
+    document.getElementById('btn-newfile').addEventListener('click', () => this._newFile());
+    document.getElementById('btn-saveas').addEventListener('click', () => this._showSaveDialog());
+    document.getElementById('file-selector').addEventListener('change', (e) => this._switchFile(e.target.value));
+    document.getElementById('dialog-ok').addEventListener('click', () => this._doSaveAs());
+
+    // 导出按钮保持直接下载 JSON
+    // Ctrl+S → 另存为对话框
+
+    // 关闭页面前自动保存
+    window.addEventListener('beforeunload', () => this._autoSave());
+  }
+
+  // ==================== 主题 ====================
+  _toggleTheme() {
+    this._isLight = !this._isLight;
+    if (this._isLight) {
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+    }
+    try { localStorage.setItem('perfboard_theme', this._isLight ? 'light' : 'dark'); } catch(e) {}
+  }
+
+  // ==================== 文件管理 ====================
+  _showSaveDialog() {
+    document.getElementById('dialog-title').textContent = '另存为';
+    document.getElementById('dialog-input').value = this._currentFile === '未命名' ? '' : this._currentFile;
+    this._updateFileList();
+    document.getElementById('dialog-overlay').classList.add('show');
+    document.getElementById('dialog-input').focus();
+  }
+
+  _doSaveAs() {
+    const name = document.getElementById('dialog-input').value.trim();
+    if (!name) return;
+    this._saveFileAs(name);
+    document.getElementById('dialog-overlay').classList.remove('show');
+  }
+
+  _saveFileAs(name) {
+    this._currentFile = name;
+    if (!this._fileList.includes(name)) {
+      this._fileList.push(name);
+    }
+    this._saveFileList();
+    this._updateFileSelector();
+    this._autoSave();
+    document.getElementById('status-hint').textContent = `已保存: ${name}`;
+  }
+
+  _newFile() {
+    this._autoSave();
+    this.model = new DataModel();
+    this.cmdMgr.clear();
+    this.selectedObject = null;
+    this._smdCounter = 0;
+    this._headerCounter = 0;
+    this._currentFile = '未命名';
+    this._updateFileSelector();
+    this._updateCompList();
+    this._updatePropPanel();
+    document.getElementById('status-hint').textContent = '新建文件';
+  }
+
+  _switchFile(name) {
+    if (!name || name === this._currentFile) return;
+    this._autoSave(); // 保存当前文件
+    this._currentFile = name;
+    this._loadCurrentFile();
+    this._updateFileSelector();
+    this._updateCompList();
+    this._updatePropPanel();
+    document.getElementById('status-hint').textContent = `已切换: ${name}`;
+  }
+
+  _saveFileList() {
+    try { localStorage.setItem('perfboard_file_list', JSON.stringify(this._fileList)); } catch(e) {}
+  }
+
+  _loadFileList() {
+    try {
+      const data = localStorage.getItem('perfboard_file_list');
+      this._fileList = data ? JSON.parse(data) : [];
+    } catch(e) { this._fileList = []; }
+  }
+
+  _loadCurrentFile() {
+    this.model = new DataModel();
+    this.cmdMgr.clear();
+    if (this._currentFile && this._currentFile !== '未命名') {
+      try {
+        const data = localStorage.getItem(`perfboard_file_${this._currentFile}`);
+        if (data) this.model.fromJSON(JSON.parse(data));
+      } catch(e) {}
+    }
+    // 恢复计数器
+    this._smdCounter = 0; this._headerCounter = 0;
+    for (const c of this.model.smdComponents) {
+      const m = c.name.match(/^R(\d+)$/);
+      if (m) this._smdCounter = Math.max(this._smdCounter, parseInt(m[1]) + 1);
+    }
+    for (const c of this.model.headerComponents) {
+      const m = c.name.match(/^J(\d+)$/);
+      if (m) this._headerCounter = Math.max(this._headerCounter, parseInt(m[1]) + 1);
+    }
+  }
+
+  _updateFileSelector() {
+    const sel = document.getElementById('file-selector');
+    sel.innerHTML = `<option value="">${this._currentFile === '未命名' ? '未命名' : this._currentFile}</option>` +
+      (this._currentFile !== '未命名' ? '<option value="">-- 未命名 --</option>' : '') +
+      this._fileList.filter(f => f !== this._currentFile).map(f => `<option value="${f}">${f}</option>`).join('');
+  }
+
+  _updateFileList() {
+    const list = document.getElementById('file-list');
+    const files = this._fileList.filter(f => f !== this._currentFile);
+    list.innerHTML = files.length === 0 ? '<div style="color:var(--text2);font-size:11px;padding:4px;">（无其他文件）</div>' :
+      files.map(f => `<div class="file-row"><span>${f}</span><span class="del-btn" data-file="${f}">&times;</span></div>`).join('');
+    list.querySelectorAll('.del-btn').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const f = el.dataset.file;
+        this._fileList = this._fileList.filter(x => x !== f);
+        this._saveFileList();
+        try { localStorage.removeItem(`perfboard_file_${f}`); } catch(e) {}
+        this._updateFileList();
+        this._updateFileSelector();
+      });
+    });
+    list.querySelectorAll('.file-row').forEach(el => {
+      el.addEventListener('click', () => {
+        document.getElementById('dialog-input').value = el.querySelector('span').textContent;
+      });
+    });
   }
 
   // ==================== 持久化 ====================
   _autoSave() {
     try {
-      localStorage.setItem('perfboard_data', JSON.stringify(this.model.toJSON()));
+      if (this._currentFile && this._currentFile !== '未命名') {
+        localStorage.setItem(`perfboard_file_${this._currentFile}`, JSON.stringify(this.model.toJSON()));
+      }
+      // 同时保存当前临时数据
+      localStorage.setItem('perfboard_data', JSON.stringify({model: this.model.toJSON(), currentFile: this._currentFile, smdCounter: this._smdCounter, headerCounter: this._headerCounter}));
     } catch(e) {}
   }
 
   _loadFromStorage() {
+    // 恢复主题
+    try {
+      const theme = localStorage.getItem('perfboard_theme');
+      if (theme === 'light') { this._isLight = true; document.documentElement.classList.add('light'); }
+    } catch(e) {}
+
+    // 恢复文件列表
+    this._loadFileList();
+
+    // 恢复上次会话状态
     try {
       const data = localStorage.getItem('perfboard_data');
       if (data) {
-        this.model.fromJSON(JSON.parse(data));
+        const parsed = JSON.parse(data);
+        if (parsed.model) {
+          this.model.fromJSON(parsed.model);
+          this._currentFile = parsed.currentFile || '未命名';
+          this._smdCounter = parsed.smdCounter || 0;
+          this._headerCounter = parsed.headerCounter || 0;
+        } else {
+          this.model.fromJSON(parsed);
+        }
       }
     } catch(e) {}
+
+    // 恢复名称计数器
+    for (const c of this.model.smdComponents) {
+      const m = c.name.match(/^R(\d+)$/);
+      if (m) this._smdCounter = Math.max(this._smdCounter, parseInt(m[1]) + 1);
+    }
+    for (const c of this.model.headerComponents) {
+      const m = c.name.match(/^J(\d+)$/);
+      if (m) this._headerCounter = Math.max(this._headerCounter, parseInt(m[1]) + 1);
+    }
+
+    this._updateFileSelector();
 
     // 初始居中
     this.offsetX = this.canvas.parentElement.clientWidth / 2;
