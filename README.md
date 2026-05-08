@@ -60,11 +60,14 @@
 
 ## 版本历史
 
-### v0.16（当前版本）
-- 修复：第二次编组后无法水平拖动（拆组/选独立器件时清除_dragGroupStart残留）
-- 修复：拆组后首次独立拖动仍整体移动（_ungroupSelected清除_dragGroupStart）
-- 修复：框选后只能单独移动无法整体拖动（点击独立器件时清除_dragGroupStart）
-- 优化：拖动追踪改用浮点格点(screenToGridFloat+Math.round)，小幅度鼠标移动也能响应
+### v0.17（当前版本）
+- 修复：编组/框选后完全无法拖动的根本原因——状态机长按检测漏掉了_dragGroupStart
+  （mousemove/mouseup 三处条件均补充，框选拖拽自动从_multiSelection构建临时_dragGroupStart）
+
+### v0.16
+- 修复：拆组/选独立器件时清除_dragGroupStart残留
+- 优化：拖动追踪改用浮点格点(screenToGridFloat+Math.round)
+- 已知问题：状态机长按检测漏检_dragGroupStart，导致编组/框选仍无法拖动
 
 ### v0.15
 - 修复：橡皮擦擦除器件后撤回无法恢复（改用JSON序列化保存完整数据再恢复）
