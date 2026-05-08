@@ -1156,7 +1156,7 @@ class App {
 
     // 矩形框选更新（短按拖动即可，不要求长按）
     if (this._selectRect && this.mouseDown && this.mode === 'select') {
-      if (moved > 3) {
+      if (Math.hypot(dx, dy) > 3) {
         this.isDragging = true;
         this._selectRect.sx2 = pos.x; this._selectRect.sy2 = pos.y;
       }
@@ -1407,6 +1407,7 @@ class App {
       const newTrace = {id: uid(), points: points.map(p => ({gx: p.gx, gy: p.gy}))};
       const cmd = new Command('添加焊锡走线', () => {
         that.model.addSolderTrace(newTrace);
+        that._mergeColinear(newTrace);
         return {trace: newTrace};
       }, (data) => {
         that.model.remove(data.trace);
@@ -1766,11 +1767,12 @@ class App {
         return {trace: newTrace};
       }, (data) => { that.model.remove(data.trace); });
       this.cmdMgr.execute(cmd);
+      // 记录新走线的终点引用，后续单击/双击可延续
+      this.routingFromEndpoint = {trace: newTrace, point: newTrace.points[newTrace.points.length - 1], isStart: false};
     }
 
     const lastPt = pts[pts.length - 1];
     this.routingState = {points: [{gx: lastPt.gx, gy: lastPt.gy}]};
-    this.routingFromEndpoint = null;
     this._autoSave();
     document.getElementById('status-hint').textContent = '段已固定 | 单击继续 | 双击结束';
   }
@@ -2100,6 +2102,42 @@ class App {
   deleteSelected() {
     const sel = this.selectedObject;
     if (!sel) return;
+
+    // 焊锡段：删除该段，前后分裂为两条独立走线
+    if (sel.trace && sel.segIdx !== undefined) {
+      const trace = sel.trace;
+      const i = sel.segIdx;
+      const pts = trace.points;
+      const leftPts = pts.slice(0, i + 1);   // points[0..i]
+      const rightPts = pts.slice(i + 1);      // points[i+1..n]
+      const that = this;
+
+      const cmd = new Command('删除焊锡段', () => {
+        // 移除原走线
+        that.model.remove(trace);
+        // 创建左右两段（至少2个点）
+        const created = [];
+        if (leftPts.length >= 2) {
+          const lt = {id: uid(), points: leftPts.map(p=>({gx:p.gx,gy:p.gy})), color: trace.color, name: trace.name};
+          that.model.addSolderTrace(lt); created.push(lt);
+        }
+        if (rightPts.length >= 2) {
+          const rt = {id: uid(), points: rightPts.map(p=>({gx:p.gx,gy:p.gy})), color: trace.color, name: trace.name};
+          that.model.addSolderTrace(rt); created.push(rt);
+        }
+        return {trace, leftPts, rightPts, created, oldColor: trace.color, oldName: trace.name};
+      }, (data) => {
+        for (const t of data.created) that.model.remove(t);
+        that.model.addSolderTrace(data.trace);
+      });
+
+      this.cmdMgr.execute(cmd);
+      this.selectedObject = null;
+      this._updatePropPanel(); this._updateCompList(); this._autoSave();
+      return;
+    }
+
+    // 普通对象删除
     const that = this;
     const arr = this.model.arrayFor(sel);
     const idx = arr ? arr.indexOf(sel) : -1;
