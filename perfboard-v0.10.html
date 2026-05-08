@@ -1057,11 +1057,12 @@ class App {
     // 排针放置预览
     if (this.mouseDown && this.mode === 'header' && this.headerPreview) {
       const startGp = this.hitTester.nearestGridPoint(this.mouseDownSX, this.mouseDownSY);
-      if (startGp && gp) {
-        const gx = Math.min(startGp.gx, gp.gx);
-        const gy = Math.min(startGp.gy, gp.gy);
-        const w = Math.abs(gp.gx - startGp.gx) + 1;
-        const h = Math.abs(gp.gy - startGp.gy) + 1;
+      const hgp = this.highlightedGridPoint;
+      if (startGp && hgp) {
+        const gx = Math.min(startGp.gx, hgp.gx);
+        const gy = Math.min(startGp.gy, hgp.gy);
+        const w = Math.abs(hgp.gx - startGp.gx) + 1;
+        const h = Math.abs(hgp.gy - startGp.gy) + 1;
         this.headerPreview = {gx, gy, w, h};
       }
       return;
