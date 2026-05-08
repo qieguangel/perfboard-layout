@@ -327,6 +327,14 @@ class HitTester {
     };
   }
 
+  // 浮点格点（不取整），用于平滑拖拽
+  screenToGridFloat(sx, sy) {
+    return {
+      gx: (sx - this.ox) / (this.gridSize * this.zoom),
+      gy: (sy - this.oy) / (this.gridSize * this.zoom),
+    };
+  }
+
   gridToScreen(gx, gy) {
     return {
       sx: gx * this.gridSize * this.zoom + this.ox,
@@ -1096,11 +1104,12 @@ class App {
     const comp = this.hitTester.componentAt(pos.x, pos.y);
     if (comp) {
       this.selectedObject = comp;
+      this._dragGroupStart = null; // 点击独立器件时清除编组拖拽
       this.dragCompStart = comp.type === 'smd'
         ? {gx1: comp.gx1, gy1: comp.gy1, gx2: comp.gx2, gy2: comp.gy2}
         : {gx: comp.gx, gy: comp.gy};
-      const rawGp = this.hitTester.screenToGrid(pos.x, pos.y);
-      this.dragMouseStart = {gx: rawGp.gx, gy: rawGp.gy};
+      const rf = this.hitTester.screenToGridFloat(pos.x, pos.y);
+      this.dragMouseStart = {gx: rf.gx, gy: rf.gy};
       this._updatePropPanel();
       this._updateCompList();
       return;
@@ -1112,7 +1121,6 @@ class App {
       const grp = this.model.componentGroups.find(g => g.id === grpComp.groupId);
       if (grp) {
         this.selectedObject = grp;
-        // 记录组内所有器件的起始位置
         this._dragGroupStart = [];
         for (const cid of grp.componentIds) {
           const c = this.model.findById(cid);
@@ -1120,8 +1128,8 @@ class App {
           if (c.type === 'smd') this._dragGroupStart.push({comp:c, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
           else this._dragGroupStart.push({comp:c, gx:c.gx, gy:c.gy});
         }
-        const rawGp = this.hitTester.screenToGrid(pos.x, pos.y);
-        this.dragMouseStart = {gx: rawGp.gx, gy: rawGp.gy};
+        const rf = this.hitTester.screenToGridFloat(pos.x, pos.y);
+        this.dragMouseStart = {gx: rf.gx, gy: rf.gy};
         this._updatePropPanel();
         this._updateCompList();
         return;
@@ -1498,11 +1506,10 @@ class App {
 
   _moveComponentToCursor(pos) {
     if (!this.dragMouseStart) return;
-    // 使用 screenToGrid 保证非格点处也能拖动
-    const raw = this.hitTester.screenToGrid(pos.x, pos.y);
-    if (!raw) return;
-    const dgx = raw.gx - this.dragMouseStart.gx;
-    const dgy = raw.gy - this.dragMouseStart.gy;
+    // 使用浮点格点，小幅度鼠标移动也能追踪
+    const rf = this.hitTester.screenToGridFloat(pos.x, pos.y);
+    const dgx = Math.round(rf.gx - this.dragMouseStart.gx);
+    const dgy = Math.round(rf.gy - this.dragMouseStart.gy);
 
     // 组拖拽
     if (this._dragGroupStart) {
@@ -2000,11 +2007,11 @@ class App {
       }
       this.model.componentGroups = this.model.componentGroups.filter(g => g.id !== sel.id);
       this.selectedObject = null;
+      this._dragGroupStart = null; // 清除残留编组拖拽数据
       this._updateCompList();
       this._autoSave();
       document.getElementById('status-hint').textContent = '已拆组';
     } else if (this._multiSelection.length >= 2) {
-      // 拆所有框选器件的组
       for (const comp of this.model.allComponents()) {
         if (this._multiSelection.includes(comp.id)) comp.groupId = null;
       }
