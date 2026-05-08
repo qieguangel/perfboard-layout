@@ -129,6 +129,11 @@ canvas { display:block; position:absolute; top:0; left:0; outline:none; }
     <button id="btn-flipv" title="垂直翻转 (V)">⇕ 垂直翻转</button>
   </div>
   <span class="sep"></span>
+  <div class="group">
+    <button id="btn-group" title="将选中器件编组 (G)">🔗 编组</button>
+    <button id="btn-ungroup" title="拆分选中组 (U)">💔 拆组</button>
+  </div>
+  <span class="sep"></span>
   <label>网格:</label>
   <input type="range" id="grid-size" min="15" max="40" value="25" title="网格大小">
   <span id="grid-label">25</span>
@@ -159,10 +164,11 @@ canvas { display:block; position:absolute; top:0; left:0; outline:none; }
 </div>
 
 <div id="prop-panel">
-  <h4>器件属性</h4>
+  <h4>属性</h4>
   <div class="row"><label>名称</label><input id="prop-name"></div>
   <div class="row" id="prop-type-row"><label>类型</label><span id="prop-type"></span></div>
   <div class="row" id="prop-pos-row"><label>位置</label><span id="prop-pos"></span></div>
+  <div class="row" id="prop-color-row" style="display:none"><label>颜色</label><input type="color" id="prop-color" value="#e94560"></div>
   <div id="prop-pins-row" style="display:none"><label style="color:#999;margin-bottom:4px;">引脚标签 (双击画布上引脚编辑)</label><div id="prop-pins" style="font-size:10px;color:#aaa;max-height:100px;overflow-y:auto;"></div></div>
   <button id="prop-apply">应用</button>
 </div>
@@ -226,10 +232,11 @@ function distToSeg(px, py, ax, ay, bx, by) {
 // ==================== 数据模型 ====================
 class DataModel {
   constructor() {
-    this.solderTraces = [];   // {id, points:[{gx,gy},...], color?}
+    this.solderTraces = [];   // {id, points:[{gx,gy},...], color?, name?}
     this.flyWires = [];       // {id, from:{gx,gy}, to:{gx,gy}}
-    this.smdComponents = [];  // {id, type:'smd', name, gx1,gy1, gx2,gy2}
-    this.headerComponents = []; // {id, type:'header', name, gx,gy, w,h, pinLabels:{}}
+    this.smdComponents = [];  // {id, type:'smd', name, gx1,gy1, gx2,gy2, groupId?}
+    this.headerComponents = []; // {id, type:'header', name, gx,gy, w,h, pinLabels:{}, groupId?}
+    this.componentGroups = []; // {id, name, componentIds:[id,...]}
   }
 
   allComponents() {
@@ -279,6 +286,7 @@ class DataModel {
       headerComponents: this.headerComponents,
       solderTraces: this.solderTraces,
       flyWires: this.flyWires,
+      componentGroups: this.componentGroups,
     };
   }
 
@@ -288,6 +296,7 @@ class DataModel {
     this.headerComponents = data.headerComponents || [];
     this.solderTraces = data.solderTraces || [];
     this.flyWires = data.flyWires || [];
+    this.componentGroups = data.componentGroups || [];
     _idCounter = Math.max(...this._allIds(), 0) + 1;
   }
 
@@ -528,12 +537,12 @@ class Renderer {
     const ctx = this.ctx;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    const mainColor = light ? '#c0392b' : '#e94560';
-    const glowColor = light ? 'rgba(192, 57, 43, 0.25)' : 'rgba(233, 69, 96, 0.3)';
-    const dotColor = light ? '#e74c3c' : '#ff6b81';
+    const defColor = light ? '#c0392b' : '#e94560';
     for (const trace of this.model.solderTraces) {
       if (trace.points.length < 2) continue;
-      ctx.strokeStyle = glowColor;
+      const tc = trace.color || defColor;
+      // glow
+      ctx.strokeStyle = tc + '4d';
       ctx.lineWidth = (this.gridSize * this.zoom * 0.45);
       ctx.beginPath();
       const p0 = this.gridToScreen(trace.points[0].gx, trace.points[0].gy);
@@ -544,7 +553,7 @@ class Renderer {
       }
       ctx.stroke();
 
-      ctx.strokeStyle = mainColor;
+      ctx.strokeStyle = tc;
       ctx.lineWidth = Math.max(2, this.gridSize * this.zoom * 0.22);
       ctx.beginPath();
       const q0 = this.gridToScreen(trace.points[0].gx, trace.points[0].gy);
@@ -557,10 +566,20 @@ class Renderer {
 
       for (const pt of [trace.points[0], trace.points[trace.points.length - 1]]) {
         const p = this.gridToScreen(pt.gx, pt.gy);
-        ctx.fillStyle = dotColor;
+        ctx.fillStyle = tc;
         ctx.beginPath();
         ctx.arc(p.sx, p.sy, Math.max(2.5, this.gridSize * this.zoom * 0.16), 0, Math.PI * 2);
         ctx.fill();
+      }
+      // 焊锡线名称
+      if (trace.name) {
+        const mid = trace.points[Math.floor(trace.points.length / 2)];
+        const mp = this.gridToScreen(mid.gx, mid.gy);
+        ctx.fillStyle = light ? '#333' : '#fff';
+        ctx.font = `${Math.max(9, this.gridSize * this.zoom * 0.28)}px "Microsoft YaHei", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(trace.name, mp.sx, mp.sy - 4);
       }
     }
   }
@@ -667,10 +686,36 @@ class Renderer {
   }
 
   _drawSelectionHighlight() {
-    const sel = this.app.selectedObject;
-    if (!sel) return;
     const ctx = this.ctx;
     const dashLen = 4;
+
+    // 多选框选高亮
+    const multi = this.app._multiSelection;
+    if (multi.length > 0) {
+      const gs = this.gridSize * this.zoom;
+      for (const cid of multi) {
+        const c = this.app.model.findById(cid);
+        if (!c) continue;
+        ctx.strokeStyle = '#f39c12'; ctx.lineWidth = 2;
+        ctx.setLineDash([dashLen, dashLen]);
+        if (c.type === 'smd') {
+          const a = this.gridToScreen(c.gx1, c.gy1), b = this.gridToScreen(c.gx2, c.gy2);
+          const cx = (a.sx + b.sx) / 2, cy = (a.sy + b.sy) / 2;
+          const isH = c.gy1 === c.gy2;
+          const bw = isH ? gs * 0.85 + 6 : gs * 0.3 + 6;
+          const bh = isH ? gs * 0.3 + 6 : gs * 0.85 + 6;
+          ctx.strokeRect(cx - bw/2, cy - bh/2, bw, bh);
+        } else {
+          const p = this.gridToScreen(c.gx, c.gy);
+          const w = (c.w - 1) * gs, h = (c.h - 1) * gs, m = gs * 0.35 + 3;
+          ctx.strokeRect(p.sx - m, p.sy - m, w + m*2, h + m*2);
+        }
+      }
+      ctx.setLineDash([]);
+    }
+
+    const sel = this.app.selectedObject;
+    if (!sel) return;
 
     if (sel.type === 'smd') {
       const a = this.gridToScreen(sel.gx1, sel.gy1);
@@ -704,6 +749,30 @@ class Renderer {
       ctx.lineWidth = 3;
       ctx.setLineDash([dashLen, dashLen]);
       ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
+      ctx.setLineDash([]);
+    } else if (sel.componentIds !== undefined) {
+      // 选中组：高亮所有成员
+      const gs = this.gridSize * this.zoom;
+      for (const cid of sel.componentIds) {
+        const c = this.app.model.findById(cid);
+        if (!c) continue;
+        if (c.type === 'smd') {
+          const a = this.gridToScreen(c.gx1, c.gy1), b = this.gridToScreen(c.gx2, c.gy2);
+          const cx = (a.sx + b.sx) / 2, cy = (a.sy + b.sy) / 2;
+          const isH = c.gy1 === c.gy2;
+          const bw = isH ? gs * 0.85 + 8 : gs * 0.3 + 8;
+          const bh = isH ? gs * 0.3 + 8 : gs * 0.85 + 8;
+          ctx.strokeStyle = '#9b59b6'; ctx.lineWidth = 2;
+          ctx.setLineDash([dashLen, dashLen]);
+          ctx.strokeRect(cx - bw/2, cy - bh/2, bw, bh);
+        } else {
+          const p = this.gridToScreen(c.gx, c.gy);
+          const w = (c.w - 1) * gs, h = (c.h - 1) * gs, m = gs * 0.35 + 3;
+          ctx.strokeStyle = '#9b59b6'; ctx.lineWidth = 2.5;
+          ctx.setLineDash([dashLen, dashLen]);
+          ctx.strokeRect(p.sx - m, p.sy - m, w + m*2, h + m*2);
+        }
+      }
       ctx.setLineDash([]);
     } else if (sel.trace && sel.segIdx !== undefined) {
       // 焊锡段选中高亮
@@ -805,6 +874,22 @@ class Renderer {
       ctx.fill();
     }
 
+    // 矩形框选预览
+    const selectRect = this.app._selectRect;
+    if (selectRect && this.app.isDragging) {
+      const x = Math.min(selectRect.sx1, selectRect.sx2);
+      const y = Math.min(selectRect.sy1, selectRect.sy2);
+      const w = Math.abs(selectRect.sx2 - selectRect.sx1);
+      const h = Math.abs(selectRect.sy2 - selectRect.sy1);
+      ctx.strokeStyle = '#f39c12';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(x, y, w, h);
+      ctx.fillStyle = 'rgba(243,156,18,0.08)';
+      ctx.fillRect(x, y, w, h);
+      ctx.setLineDash([]);
+    }
+
     // SMD 第一点标记
     const smdStart = this.app.smdStart;
     if (smdStart) {
@@ -874,6 +959,9 @@ class App {
     this._solderTimer = null;
     this._solderPendingGp = null;
     this.headerPreview = null;
+    // 矩形框选
+    this._selectRect = null;     // {sx1,sy1,sx2,sy2} 屏幕坐标
+    this._multiSelection = [];   // 框选的多个组件id列表
     this.flyWireStart = null;
     this.smdStart = null;
     this.highlightedGridPoint = null;
@@ -1026,8 +1114,10 @@ class App {
       return;
     }
 
-    // 点击空白处：取消选中
+    // 点击空白处：开始矩形框选（准备长按后拖动）
     this.selectedObject = null;
+    this._multiSelection = [];
+    this._selectRect = {sx1: pos.x, sy1: pos.y, sx2: pos.x, sy2: pos.y};
     this._updatePropPanel();
     this._updateCompList();
   }
@@ -1052,6 +1142,16 @@ class App {
       this.isDragging = true;
       this._updateStatus();
       return;
+    }
+
+    // 矩形框选更新
+    if (this._selectRect && this.mouseDown && this.mode === 'select') {
+      const elapsed = Date.now() - this.mouseDownTime;
+      if (elapsed >= LONG_PRESS_MS) {
+        this.isDragging = true;
+        this._selectRect.sx2 = pos.x; this._selectRect.sy2 = pos.y;
+        return;
+      }
     }
 
     // 排针放置预览
@@ -1120,6 +1220,14 @@ class App {
     }
 
     if (e.button !== 0) return;
+
+    // 矩形框选完成
+    if (this._selectRect && this.isDragging) {
+      this._finishRectSelect();
+      this.mouseDown = false; this.isDragging = false;
+      return;
+    }
+    this._selectRect = null;
 
     // 排针放置完成
     if (this.mode === 'header' && this.headerPreview) {
@@ -1629,19 +1737,67 @@ class App {
     document.getElementById('status-hint').textContent = '段已固定 | 单击继续 | 双击结束';
   }
 
-  // 合并共线段：将连续的共线点简化
+  // 合并共线段 + 合并相接的独立焊锡线
   _mergeColinear(trace) {
+    // 1. 内部共线点简化
     const pts = trace.points;
-    if (pts.length < 3) return;
-    let i = 1;
-    while (i < pts.length - 1) {
-      const prev = pts[i - 1], curr = pts[i], next = pts[i + 1];
-      // 共线：x方向相同 或 y方向相同
-      if ((prev.gx === curr.gx && curr.gx === next.gx) ||
-          (prev.gy === curr.gy && curr.gy === next.gy)) {
-        pts.splice(i, 1); // 移除中间点
-      } else {
-        i++;
+    if (pts.length >= 3) {
+      let i = 1;
+      while (i < pts.length - 1) {
+        const prev = pts[i - 1], curr = pts[i], next = pts[i + 1];
+        if ((prev.gx === curr.gx && curr.gx === next.gx) ||
+            (prev.gy === curr.gy && curr.gy === next.gy)) {
+          pts.splice(i, 1);
+        } else { i++; }
+      }
+    }
+
+    // 2. 跨走线合并：找与 trace 端点相接的其他走线
+    if (pts.length < 2) return;
+    const merged = [trace];
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const other of this.model.solderTraces) {
+        if (merged.includes(other) || other.points.length < 2) continue;
+        for (const mt of merged) {
+          const mf = mt.points[0], ml = mt.points[mt.points.length - 1];
+          const of = other.points[0], ol = other.points[other.points.length - 1];
+          // 首-尾相接
+          if (ml.gx === of.gx && ml.gy === of.gy) {
+            mt.points = [...mt.points, ...other.points.slice(1)];
+            this.model.remove(other); merged.push(other); changed = true; break;
+          }
+          // 首-首相接（反转other）
+          if (ml.gx === ol.gx && ml.gy === ol.gy) {
+            mt.points = [...mt.points, ...other.points.slice().reverse().slice(1)];
+            this.model.remove(other); merged.push(other); changed = true; break;
+          }
+          // 尾-首相接
+          if (mf.gx === ol.gx && mf.gy === ol.gy) {
+            mt.points = [...other.points, ...mt.points.slice(1)];
+            this.model.remove(other); merged.push(other); changed = true; break;
+          }
+          // 尾-尾相接（反转other）
+          if (mf.gx === of.gx && mf.gy === of.gy) {
+            mt.points = [...other.points.slice().reverse(), ...mt.points.slice(1)];
+            this.model.remove(other); merged.push(other); changed = true; break;
+          }
+        }
+      }
+    }
+    // 再次内部简化（合并后可能产生新的共线点）
+    for (const mt of merged) {
+      const p = mt.points;
+      if (p.length >= 3) {
+        let i = 1;
+        while (i < p.length - 1) {
+          const prev = p[i - 1], curr = p[i], next = p[i + 1];
+          if ((prev.gx === curr.gx && curr.gx === next.gx) ||
+              (prev.gy === curr.gy && curr.gy === next.gy)) {
+            p.splice(i, 1);
+          } else { i++; }
+        }
       }
     }
   }
@@ -1701,6 +1857,8 @@ class App {
     if (e.key === 'v' || e.key === 'V') { e.preventDefault(); this.flipVertical(); return; }
     if (e.key === 'Delete' || e.key === 'Del') { e.preventDefault(); this.deleteSelected(); return; }
     if (e.key === 'Escape') { e.preventDefault(); this._cancelAll(); return; }
+    if (e.key === 'g' || e.key === 'G') { e.preventDefault(); this._groupSelected(); return; }
+    if (e.key === 'u' || e.key === 'U') { e.preventDefault(); this._ungroupSelected(); return; }
 
     if (e.key === '1') { this.setMode('select'); return; }
     if (e.key === '2') { this.setMode('smd'); return; }
@@ -1724,6 +1882,102 @@ class App {
     }
   }
 
+  // 矩形框选完成
+  _finishRectSelect() {
+    const r = this._selectRect;
+    if (!r) return;
+    const x1 = Math.min(r.sx1, r.sx2), x2 = Math.max(r.sx1, r.sx2);
+    const y1 = Math.min(r.sy1, r.sy2), y2 = Math.max(r.sy1, r.sy2);
+    if (x2 - x1 < 5 && y2 - y1 < 5) { this._selectRect = null; return; } // 太小忽略
+
+    const ids = [];
+    for (const comp of this.model.allComponents()) {
+      // 获取组件屏幕位置
+      let cx, cy;
+      if (comp.type === 'smd') {
+        const a = this.hitTester.gridToScreen(comp.gx1, comp.gy1);
+        const b = this.hitTester.gridToScreen(comp.gx2, comp.gy2);
+        cx = (a.sx + b.sx) / 2; cy = (a.sy + b.sy) / 2;
+      } else {
+        const p = this.hitTester.gridToScreen(comp.gx, comp.gy);
+        const gs = this.gridSize * this.zoom;
+        cx = p.sx + (comp.w - 1) * gs / 2;
+        cy = p.sy + (comp.h - 1) * gs / 2;
+      }
+      if (cx >= x1 && cx <= x2 && cy >= y1 && cy <= y2) {
+        ids.push(comp.id);
+      }
+    }
+    this._multiSelection = ids;
+    if (ids.length > 0) {
+      this.selectedObject = null;
+      document.getElementById('status-hint').textContent = `已框选 ${ids.length} 个器件 | G编组 G拆组`;
+    }
+    this._selectRect = null;
+    this._updateCompList();
+  }
+
+  // 编组
+  _groupSelected() {
+    const ids = this._getSelectionIds();
+    if (ids.length < 2) { document.getElementById('status-hint').textContent = '至少选2个器件才能编组'; return; }
+    const group = { id: uid(), name: 'Grp' + (this.model.componentGroups.length + 1), componentIds: [...ids] };
+    for (const comp of this.model.allComponents()) {
+      if (ids.includes(comp.id)) comp.groupId = group.id;
+    }
+    this.model.componentGroups.push(group);
+    this._multiSelection = [];
+    this.selectedObject = group;
+    this._updateCompList();
+    this._autoSave();
+    document.getElementById('status-hint').textContent = `已编组: ${group.name}`;
+  }
+
+  // 拆组
+  _ungroupSelected() {
+    const sel = this.selectedObject;
+    if (sel && sel.componentIds) {
+      for (const comp of this.model.allComponents()) {
+        if (comp.groupId === sel.id) comp.groupId = null;
+      }
+      this.model.componentGroups = this.model.componentGroups.filter(g => g.id !== sel.id);
+      this.selectedObject = null;
+      this._updateCompList();
+      this._autoSave();
+      document.getElementById('status-hint').textContent = '已拆组';
+    } else if (this._multiSelection.length >= 2) {
+      // 拆所有框选器件的组
+      for (const comp of this.model.allComponents()) {
+        if (this._multiSelection.includes(comp.id)) comp.groupId = null;
+      }
+      document.getElementById('status-hint').textContent = '已拆组';
+    }
+  }
+
+  // 获取当前多选id列表
+  _getSelectionIds() {
+    if (this._multiSelection.length > 0) return this._multiSelection;
+    if (this.selectedObject) {
+      if (this.selectedObject.componentIds) return this.selectedObject.componentIds;
+      if (this.selectedObject.id) return [this.selectedObject.id];
+    }
+    return [];
+  }
+
+  // 多选移动
+  _moveMultiSelection(dgx, dgy) {
+    const ids = this._getSelectionIds();
+    for (const comp of this.model.allComponents()) {
+      if (!ids.includes(comp.id)) continue;
+      if (comp.type === 'smd') {
+        comp.gx1 += dgx; comp.gy1 += dgy;
+        comp.gx2 += dgx; comp.gy2 += dgy;
+      } else {
+        comp.gx += dgx; comp.gy += dgy;
+      }
+    }
+  }
+
   _cancelAll() {
     this.routingState = null;
     this.routingFromEndpoint = null;
@@ -1731,6 +1985,8 @@ class App {
     this._solderPendingGp = null;
     this._solderClickCount = 0;
     this._solderClickPos = null;
+    this._selectRect = null;
+    this._multiSelection = [];
     this.headerPreview = null;
     this.flyWireStart = null;
     this.smdStart = null;
@@ -1825,13 +2081,54 @@ class App {
   }
 
   rotateComponent() {
+    const ids = this._getSelectionIds();
+    if (ids.length >= 2) { this._rotateMulti(ids); return; }
     const sel = this.selectedObject;
     if (!sel) return;
-    if (sel.type === 'smd') {
-      this._rotateSMD(sel);
-    } else if (sel.type === 'header') {
-      this._rotateHeader(sel);
+    if (sel.type === 'smd') { this._rotateSMD(sel); }
+    else if (sel.type === 'header') { this._rotateHeader(sel); }
+    else if (sel.componentIds) { this._rotateMulti(sel.componentIds); }
+  }
+
+  _rotateMulti(ids) {
+    // 计算所有组件的中心
+    let sumX = 0, sumY = 0, count = 0;
+    for (const c of this.model.allComponents()) {
+      if (!ids.includes(c.id)) continue;
+      if (c.type === 'smd') { sumX += (c.gx1 + c.gx2) / 2; sumY += (c.gy1 + c.gy2) / 2; count++; }
+      else { sumX += c.gx + (c.w - 1) / 2; sumY += c.gy + (c.h - 1) / 2; count++; }
     }
+    if (count === 0) return;
+    const cx = Math.round(sumX / count), cy = Math.round(sumY / count);
+    const that = this;
+    const oldStates = [];
+    for (const c of this.model.allComponents()) {
+      if (!ids.includes(c.id)) continue;
+      if (c.type === 'smd') {
+        oldStates.push({comp: c, old: {gx1: c.gx1, gy1: c.gy1, gx2: c.gx2, gy2: c.gy2}});
+        const dx1 = c.gx1 - cx, dy1 = c.gy1 - cy;
+        const dx2 = c.gx2 - cx, dy2 = c.gy2 - cy;
+        c.gx1 = cx - dy1; c.gy1 = cy + dx1;
+        c.gx2 = cx - dy2; c.gy2 = cy + dx2;
+      } else {
+        oldStates.push({comp: c, old: {gx: c.gx, gy: c.gy, w: c.w, h: c.h}});
+        const dx = c.gx + (c.w - 1) / 2 - cx;
+        const dy = c.gy + (c.h - 1) / 2 - cy;
+        const newCenterX = cx - dy, newCenterY = cy + dx;
+        const oldW = c.w;
+        c.w = c.h; c.h = oldW;
+        c.gx = Math.round(newCenterX - (c.w - 1) / 2);
+        c.gy = Math.round(newCenterY - (c.h - 1) / 2);
+      }
+    }
+    const cmd = new Command('旋转多选', () => { return {oldStates}; }, (data) => {
+      for (const {comp, old} of data.oldStates) {
+        if (old.gx1 !== undefined) { comp.gx1 = old.gx1; comp.gy1 = old.gy1; comp.gx2 = old.gx2; comp.gy2 = old.gy2; }
+        else { comp.gx = old.gx; comp.gy = old.gy; comp.w = old.w; comp.h = old.h; }
+      }
+    });
+    this.cmdMgr.execute(cmd);
+    this._autoSave();
   }
 
   _rotateSMD(comp) {
@@ -1888,9 +2185,12 @@ class App {
   }
 
   flipHorizontal() {
+    const ids = this._getSelectionIds();
+    if (ids.length >= 2) { this._flipMulti(ids, 'h'); return; }
     const sel = this.selectedObject;
     if (!sel) return;
 
+    if (sel.componentIds) { this._flipMulti(sel.componentIds, 'h'); return; }
     if (sel.type === 'smd') {
       document.getElementById('status-hint').textContent = '贴片器件请用Ctrl+R旋转，无需翻转';
       return;
@@ -1915,9 +2215,12 @@ class App {
   }
 
   flipVertical() {
+    const ids = this._getSelectionIds();
+    if (ids.length >= 2) { this._flipMulti(ids, 'v'); return; }
     const sel = this.selectedObject;
     if (!sel) return;
 
+    if (sel.componentIds) { this._flipMulti(sel.componentIds, 'v'); return; }
     if (sel.type === 'smd') {
       document.getElementById('status-hint').textContent = '贴片器件请用Ctrl+R旋转，无需翻转';
       return;
@@ -1938,6 +2241,39 @@ class App {
       this.cmdMgr.execute(cmd);
       document.getElementById('status-hint').textContent = '已垂直翻转（标签已更新）';
     }
+    this._autoSave();
+  }
+
+  _flipMulti(ids, dir) {
+    let sumX = 0, sumY = 0, count = 0;
+    for (const c of this.model.allComponents()) {
+      if (!ids.includes(c.id)) continue;
+      if (c.type === 'smd') { sumX += (c.gx1 + c.gx2) / 2; sumY += (c.gy1 + c.gy2) / 2; count++; }
+      else { sumX += c.gx + (c.w - 1) / 2; sumY += c.gy + (c.h - 1) / 2; count++; }
+    }
+    if (count === 0) return;
+    const cx = Math.round(sumX / count), cy = Math.round(sumY / count);
+    const that = this;
+    const oldStates = [];
+    for (const c of this.model.allComponents()) {
+      if (!ids.includes(c.id)) continue;
+      if (c.type === 'smd') {
+        oldStates.push({comp: c, old: {gx1: c.gx1, gy1: c.gy1, gx2: c.gx2, gy2: c.gy2}});
+        if (dir === 'h') { c.gx1 = 2*cx - c.gx1; c.gx2 = 2*cx - c.gx2; }
+        else { c.gy1 = 2*cy - c.gy1; c.gy2 = 2*cy - c.gy2; }
+      } else {
+        oldStates.push({comp: c, old: {gx: c.gx, gy: c.gy, w: c.w, h: c.h}});
+        if (dir === 'h') { c.gx = 2*cx - (c.gx + c.w - 1); }
+        else { c.gy = 2*cy - (c.gy + c.h - 1); }
+      }
+    }
+    const cmd = new Command(dir==='h'?'水平翻转多选':'垂直翻转多选', () => { return {oldStates}; }, (data) => {
+      for (const {comp, old} of data.oldStates) {
+        if (old.gx1 !== undefined) { comp.gx1 = old.gx1; comp.gy1 = old.gy1; comp.gx2 = old.gx2; comp.gy2 = old.gy2; }
+        else { comp.gx = old.gx; comp.gy = old.gy; comp.w = old.w; comp.h = old.h; }
+      }
+    });
+    this.cmdMgr.execute(cmd);
     this._autoSave();
   }
 
@@ -1966,6 +2302,37 @@ class App {
   _updatePropPanel() {
     const panel = document.getElementById('prop-panel');
     const sel = this.selectedObject;
+    // 处理 group
+    if (sel && sel.componentIds) {
+      panel.style.display = 'block';
+      document.getElementById('prop-name').value = sel.name || '';
+      document.getElementById('prop-type').textContent = `器件组 (${sel.componentIds.length}个)`;
+      document.getElementById('prop-pos').textContent = `包含 ${sel.componentIds.length} 个器件`;
+      document.getElementById('prop-pins-row').style.display = 'none';
+      document.getElementById('prop-color-row').style.display = 'none';
+      return;
+    }
+    // 处理 trace
+    if (sel && sel.points) {
+      panel.style.display = 'block';
+      document.getElementById('prop-name').value = sel.name || '';
+      document.getElementById('prop-type').textContent = '焊锡走线';
+      document.getElementById('prop-pos').textContent = `${sel.points.length} 个节点`;
+      document.getElementById('prop-pins-row').style.display = 'none';
+      document.getElementById('prop-color-row').style.display = 'flex';
+      document.getElementById('prop-color').value = sel.color || '#e94560';
+      return;
+    }
+    // 处理多选
+    if (this._multiSelection.length > 0) {
+      panel.style.display = 'block';
+      document.getElementById('prop-name').value = '';
+      document.getElementById('prop-type').textContent = `多选 (${this._multiSelection.length}个)`;
+      document.getElementById('prop-pos').textContent = 'G编组 | 可拖动/旋转/翻转';
+      document.getElementById('prop-pins-row').style.display = 'none';
+      document.getElementById('prop-color-row').style.display = 'none';
+      return;
+    }
     if (!sel || (sel.type !== 'smd' && sel.type !== 'header')) {
       panel.style.display = 'none';
       return;
@@ -1973,12 +2340,12 @@ class App {
     panel.style.display = 'block';
     document.getElementById('prop-name').value = sel.name || '';
     document.getElementById('prop-type').textContent = sel.type === 'smd' ? '贴片器件' : '排针/排座';
+    document.getElementById('prop-color-row').style.display = 'none';
     if (sel.type === 'smd') {
       document.getElementById('prop-pos').textContent = `(${sel.gx1},${sel.gy1}) - (${sel.gx2},${sel.gy2})`;
       document.getElementById('prop-pins-row').style.display = 'none';
     } else {
       document.getElementById('prop-pos').textContent = `(${sel.gx},${sel.gy}) ${sel.w}×${sel.h}`;
-      // 显示引脚标签
       const pinsRow = document.getElementById('prop-pins-row');
       const pinsDiv = document.getElementById('prop-pins');
       const labels = [];
@@ -1990,28 +2357,35 @@ class App {
           }
         }
       }
-      if (labels.length > 0) {
-        pinsRow.style.display = 'block';
-        pinsDiv.textContent = labels.join('\n');
-      } else {
-        pinsRow.style.display = 'none';
-      }
+      if (labels.length > 0) { pinsRow.style.display = 'block'; pinsDiv.textContent = labels.join('\n'); }
+      else { pinsRow.style.display = 'none'; }
     }
   }
 
   _updateCompList() {
     const list = document.getElementById('comp-list');
     const comps = this.model.allComponents();
-    list.innerHTML = comps.map(c => {
-      const sel = this.selectedObject && this.selectedObject.id === c.id ? ' selected' : '';
+    let html = comps.map(c => {
+      const sel = (this.selectedObject && this.selectedObject.id === c.id) || this._multiSelection.includes(c.id) ? ' selected' : '';
+      const grp = c.groupId ? ' 🔗' : '';
       const typeLabel = c.type === 'smd' ? '[贴片]' : `[排针 ${c.w}×${c.h}]`;
-      return `<div class="comp-item${sel}" data-id="${c.id}">${typeLabel} ${c.name}</div>`;
+      return `<div class="comp-item${sel}" data-id="${c.id}">${typeLabel} ${c.name}${grp}</div>`;
     }).join('');
+    // 显示组
+    if (this.model.componentGroups.length > 0) {
+      html += '<div style="border-top:1px solid var(--border);margin:4px 0;"></div>';
+      html += this.model.componentGroups.map(g => {
+        const sel = this.selectedObject && this.selectedObject.id === g.id ? ' selected' : '';
+        return `<div class="comp-item${sel}" data-id="${g.id}" style="color:#9b59b6;">🔗 ${g.name} (${g.componentIds.length}器件)</div>`;
+      }).join('');
+    }
+    list.innerHTML = html;
 
     list.querySelectorAll('.comp-item').forEach(el => {
       el.addEventListener('click', () => {
         const id = el.dataset.id;
-        const comp = this.model.findById(id);
+        this._multiSelection = [];
+        const comp = this.model.findById(id) || this.model.componentGroups.find(g => g.id === id);
         if (comp) {
           this.selectedObject = comp;
           this._updatePropPanel();
@@ -2064,6 +2438,8 @@ class App {
     document.getElementById('btn-rotate').addEventListener('click', () => this.rotateComponent());
     document.getElementById('btn-fliph').addEventListener('click', () => this.flipHorizontal());
     document.getElementById('btn-flipv').addEventListener('click', () => this.flipVertical());
+    document.getElementById('btn-group').addEventListener('click', () => this._groupSelected());
+    document.getElementById('btn-ungroup').addEventListener('click', () => this._ungroupSelected());
 
     const gridSlider = document.getElementById('grid-size');
     const gridLabel = document.getElementById('grid-label');
@@ -2078,13 +2454,17 @@ class App {
 
     document.getElementById('prop-apply').addEventListener('click', () => {
       const sel = this.selectedObject;
-      if (!sel || (sel.type !== 'smd' && sel.type !== 'header')) return;
+      if (!sel) return;
       const newName = document.getElementById('prop-name').value.trim();
-      if (newName) {
-        sel.name = newName;
-        this._updateCompList();
-        this._autoSave();
+      if (newName) { sel.name = newName; }
+      // 焊锡线颜色
+      if (sel.points) {
+        sel.color = document.getElementById('prop-color').value;
       }
+      // 组名称
+      if (sel.componentIds && newName) { sel.name = newName; }
+      this._updateCompList();
+      this._autoSave();
     });
 
     // 主题切换

@@ -1,5 +1,7 @@
 # 洞洞板布局工具 (Perfboard Layout Tool)
 
+**重要规则：README 尽量少删除内容！修改 README 时优先追加和更新，不要删减已有的详细描述。**
+
 ## 项目概述
 
 单文件 HTML 应用（`perfboard.html`），零依赖，浏览器直接打开即用。用于设计洞洞板（perfboard）的元器件布局和走线。
