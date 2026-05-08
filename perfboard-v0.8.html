@@ -964,6 +964,9 @@ class App {
     }
     if (this.mode === 'solder') {
       this._handleSolderClick(pos);
+      // 焊锡模式下点击即处理完毕，立即清除mouseDown，防止mousemove中的长按检测误触发_updateRouting
+      this.mouseDown = false;
+      this.isDragging = false;
       return;
     }
     if (this.mode === 'header') {
@@ -1082,8 +1085,8 @@ class App {
         return;
       }
 
-      // 走焊锡
-      if (this.routingState && elapsed >= LONG_PRESS_MS) {
+      // 走焊锡（仅选择模式下的长按拖拽，焊锡模式走双击→预览→单击流程）
+      if (this.mode !== 'solder' && this.routingState && elapsed >= LONG_PRESS_MS) {
         this.isDragging = true;
         this._updateRouting(pos);
         return;
