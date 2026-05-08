@@ -2749,6 +2749,7 @@ class App {
       document.documentElement.classList.remove('light');
     }
     try { localStorage.setItem('perfboard_theme', this._isLight ? 'light' : 'dark'); } catch(e) {}
+    this._needsRender = true;
   }
 
   // ==================== 文件管理 ====================
@@ -2776,6 +2777,11 @@ class App {
     const defName = (this._currentFile === '未命名' || (this._currentFile||'').startsWith('untitled')) ? 'my-layout' : this._currentFile;
     const name = prompt('文件名:', defName);
     if (!name || !name.trim()) return;
+    // 如果是从untitled改名，移除旧untitled工作区条目
+    const oldName = this._currentFile;
+    if (oldName && oldName.startsWith('untitled')) {
+      this._workspaceFiles = this._workspaceFiles.filter(f => f.name !== oldName);
+    }
     this._currentFile = name.trim();
     this._downloadJSON(this._currentFile + '.json');
     const exist = this._workspaceFiles.findIndex(f => f.name === this._currentFile);
