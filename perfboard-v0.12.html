@@ -344,14 +344,14 @@ class HitTester {
     return null;
   }
 
-  // 找点击位置的器件
+  // 找点击位置的器件（跳过已编组成员，编组后只能选中组整体）
   componentAt(sx, sy) {
     let best = null, bestDist = Infinity;
     for (const comp of this.model.allComponents()) {
+      if (comp.groupId) continue; // 已编组，跳过
       const d = this._distToComponent(comp, sx, sy);
       if (d !== null && d < bestDist) { bestDist = d; best = comp; }
     }
-    // 检查是否在器件范围内
     if (best) {
       if (best.type === 'smd') {
         if (bestDist > this.gridSize * this.zoom + SMD_HIT_DIST) return null;
@@ -448,7 +448,7 @@ class CommandManager {
     this.undoStack.push(cmd);
     if (this.undoStack.length > this.maxUndo) this.undoStack.shift();
     this.redoStack = [];
-    if (this.app) this.app._isDirty = true;
+    if (this.app) { this.app._isDirty = true; this.app._needsRender = true; }
   }
 
   undo() {
@@ -456,7 +456,7 @@ class CommandManager {
     const cmd = this.undoStack.pop();
     cmd.undo();
     this.redoStack.push(cmd);
-    if (this.app) this.app._isDirty = true;
+    if (this.app) { this.app._isDirty = true; this.app._needsRender = true; }
     return true;
   }
 
@@ -465,7 +465,7 @@ class CommandManager {
     const cmd = this.redoStack.pop();
     cmd.execute();
     this.undoStack.push(cmd);
-    if (this.app) this.app._isDirty = true;
+    if (this.app) { this.app._isDirty = true; this.app._needsRender = true; }
     return true;
   }
 
@@ -962,6 +962,9 @@ class App {
     // 矩形框选
     this._selectRect = null;     // {sx1,sy1,sx2,sy2} 屏幕坐标
     this._multiSelection = [];   // 框选的多个组件id列表
+    this._dragGroupStart = null; // 编组拖拽起始状态
+    this._needsRender = true;    // 脏渲染标记
+    this._lastMX = -1; this._lastMY = -1;
     this.flyWireStart = null;
     this.smdStart = null;
     this.highlightedGridPoint = null;
@@ -1091,7 +1094,6 @@ class App {
       this.dragCompStart = comp.type === 'smd'
         ? {gx1: comp.gx1, gy1: comp.gy1, gx2: comp.gx2, gy2: comp.gy2}
         : {gx: comp.gx, gy: comp.gy};
-      // 记录拖拽起始格点（使用原始坐标转换，避免非格点处点击返回null导致跳变）
       const rawGp = this.hitTester.screenToGrid(pos.x, pos.y);
       this.dragMouseStart = {gx: rawGp.gx, gy: rawGp.gy};
       this._updatePropPanel();
@@ -1099,22 +1101,29 @@ class App {
       return;
     }
 
-    // 检查是否点击了焊锡端点（准备延伸）
-    const ep = this.hitTester.solderEndpointAt(pos.x, pos.y);
-    if (ep) {
-      this.routingFromEndpoint = ep;
-      this.routingState = {points: [{gx: ep.point.gx, gy: ep.point.gy}]};
-      return;
+    // 检查是否点击了编组成员（即使componentAt跳过，仍可拖拽整组）
+    const grpComp = this._findGroupedComponentAt(pos.x, pos.y);
+    if (grpComp && grpComp.groupId) {
+      const grp = this.model.componentGroups.find(g => g.id === grpComp.groupId);
+      if (grp) {
+        this.selectedObject = grp;
+        // 记录组内所有器件的起始位置
+        this._dragGroupStart = [];
+        for (const cid of grp.componentIds) {
+          const c = this.model.findById(cid);
+          if (!c) continue;
+          if (c.type === 'smd') this._dragGroupStart.push({comp:c, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
+          else this._dragGroupStart.push({comp:c, gx:c.gx, gy:c.gy});
+        }
+        const rawGp = this.hitTester.screenToGrid(pos.x, pos.y);
+        this.dragMouseStart = {gx: rawGp.gx, gy: rawGp.gy};
+        this._updatePropPanel();
+        this._updateCompList();
+        return;
+      }
     }
 
-    // 检查是否在格点上（准备走焊锡）
-    const gp = this.hitTester.nearestGridPoint(pos.x, pos.y);
-    if (gp) {
-      this.routingState = {points: [{gx: gp.gx, gy: gp.gy}]};
-      return;
-    }
-
-    // 点击空白处：开始矩形框选（准备长按后拖动）
+    // 选择模式空白处：开始矩形框选（短按拖动即可，移除格点路由避免冲突）
     this.selectedObject = null;
     this._multiSelection = [];
     this._selectRect = {sx1: pos.x, sy1: pos.y, sx2: pos.x, sy2: pos.y};
@@ -1127,6 +1136,7 @@ class App {
     const dx = pos.x - this.mouseDownSX;
     const dy = pos.y - this.mouseDownSY;
     this.mouseX = pos.x; this.mouseY = pos.y;
+    this._needsRender = true; // 鼠标移动需要重绘（预览线/高亮）
 
     // 更新格点高亮（焊锡模式始终显示，其他模式仅靠近格点时显示）
     if (this.mode === 'solder') {
@@ -1144,14 +1154,13 @@ class App {
       return;
     }
 
-    // 矩形框选更新
+    // 矩形框选更新（短按拖动即可，不要求长按）
     if (this._selectRect && this.mouseDown && this.mode === 'select') {
-      const elapsed = Date.now() - this.mouseDownTime;
-      if (elapsed >= LONG_PRESS_MS) {
+      if (moved > 3) {
         this.isDragging = true;
         this._selectRect.sx2 = pos.x; this._selectRect.sy2 = pos.y;
-        return;
       }
+      return;
     }
 
     // 排针放置预览
@@ -1186,12 +1195,7 @@ class App {
         return;
       }
 
-      // 走焊锡（仅选择模式下的长按拖拽，焊锡模式走双击→预览→单击流程）
-      if (this.mode !== 'solder' && this.routingState && elapsed >= LONG_PRESS_MS) {
-        this.isDragging = true;
-        this._updateRouting(pos);
-        return;
-      }
+      // 长按路由已移除：选择模式用框选，焊锡模式用双击→单击流程
     }
 
     // 已经处于拖拽状态
@@ -1253,24 +1257,7 @@ class App {
       return;
     }
 
-    // 焊锡走线完成
-    if (this.isDragging && this.routingState) {
-      this._finishRouting();
-      this.mouseDown = false;
-      this.isDragging = false;
-      return;
-    }
-
-    // 短按：选中
-    if (!this.isDragging && elapsed < LONG_PRESS_MS && moved < CLICK_DIST) {
-      // 已在mousedown中处理选中
-    }
-
-    // 选择模式下：没拖动且走线只有起点 → 取消（焊锡模式走双击流程，不受此影响）
-    if (this.mode !== 'solder' && this.routingState && this.routingState.points.length <= 1 && !this.isDragging) {
-      this.routingState = null;
-      this.routingFromEndpoint = null;
-    }
+    // 短按：已在mousedown中处理选中
 
     this.mouseDown = false;
     this.isDragging = false;
@@ -1291,6 +1278,7 @@ class App {
     const worldY = (pos.y - this.offsetY) / oldZoom;
     this.offsetX = pos.x - worldX * this.zoom;
     this.offsetY = pos.y - worldY * this.zoom;
+    this._needsRender = true;
     this._updateStatus();
   }
 
@@ -1479,29 +1467,79 @@ class App {
   }
 
   // ==================== 器件移动 ====================
+  // 查找编组成员（componentAt会跳过，但拖拽和双击引脚仍需）
+  _findGroupedComponentAt(sx, sy) {
+    let best = null, bestDist = Infinity;
+    for (const comp of this.model.allComponents()) {
+      if (!comp.groupId) continue;
+      const d = this.hitTester._distToComponent(comp, sx, sy);
+      if (d !== null && d < bestDist) { bestDist = d; best = comp; }
+    }
+    if (best && bestDist < this.gridSize * this.zoom + SMD_HIT_DIST) return best;
+    return null;
+  }
+
   _moveComponentToCursor(pos) {
-    if (!this.selectedObject || !this.dragCompStart || !this.dragMouseStart) return;
+    if (!this.dragMouseStart) return;
     const gp = this.hitTester.nearestGridPoint(pos.x, pos.y);
     if (!gp) return;
-
-    const comp = this.selectedObject;
-    const start = this.dragCompStart;
     const dgx = gp.gx - this.dragMouseStart.gx;
     const dgy = gp.gy - this.dragMouseStart.gy;
 
+    // 组拖拽
+    if (this._dragGroupStart) {
+      for (const item of this._dragGroupStart) {
+        if (item.gx1 !== undefined) {
+          item.comp.gx1 = item.gx1 + dgx; item.comp.gy1 = item.gy1 + dgy;
+          item.comp.gx2 = item.gx2 + dgx; item.comp.gy2 = item.gy2 + dgy;
+        } else {
+          item.comp.gx = item.gx + dgx; item.comp.gy = item.gy + dgy;
+        }
+      }
+      return;
+    }
+
+    if (!this.selectedObject || !this.dragCompStart) return;
+    const comp = this.selectedObject;
+    const start = this.dragCompStart;
     if (comp.type === 'smd') {
-      comp.gx1 = start.gx1 + dgx;
-      comp.gy1 = start.gy1 + dgy;
-      comp.gx2 = start.gx2 + dgx;
-      comp.gy2 = start.gy2 + dgy;
+      comp.gx1 = start.gx1 + dgx; comp.gy1 = start.gy1 + dgy;
+      comp.gx2 = start.gx2 + dgx; comp.gy2 = start.gy2 + dgy;
     } else if (comp.type === 'header') {
-      comp.gx = start.gx + dgx;
-      comp.gy = start.gy + dgy;
+      comp.gx = start.gx + dgx; comp.gy = start.gy + dgy;
     }
     this._updatePropPanel();
   }
 
   _finishComponentMove() {
+    // 组拖拽完成
+    if (this._dragGroupStart) {
+      const oldItems = this._dragGroupStart.map(item => {
+        if (item.gx1 !== undefined) return {comp:item.comp, gx1:item.gx1, gy1:item.gy1, gx2:item.gx2, gy2:item.gy2};
+        return {comp:item.comp, gx:item.gx, gy:item.gy};
+      });
+      const newItems = this._dragGroupStart.map(item => {
+        if (item.gx1 !== undefined) return {comp:item.comp, gx1:item.comp.gx1, gy1:item.comp.gy1, gx2:item.comp.gx2, gy2:item.comp.gy2};
+        return {comp:item.comp, gx:item.comp.gx, gy:item.comp.gy};
+      });
+      const that = this;
+      const cmd = new Command('移动编组', () => {
+        for (const n of newItems) {
+          if (n.gx1 !== undefined) { n.comp.gx1=n.gx1; n.comp.gy1=n.gy1; n.comp.gx2=n.gx2; n.comp.gy2=n.gy2; }
+          else { n.comp.gx=n.gx; n.comp.gy=n.gy; }
+        }
+        return {oldItems};
+      }, (data) => {
+        for (const o of data.oldItems) {
+          if (o.gx1 !== undefined) { o.comp.gx1=o.gx1; o.comp.gy1=o.gy1; o.comp.gx2=o.gx2; o.comp.gy2=o.gy2; }
+          else { o.comp.gx=o.gx; o.comp.gy=o.gy; }
+        }
+      });
+      this.cmdMgr.execute(cmd);
+      this._dragGroupStart = null;
+      this._updatePropPanel(); this._updateCompList(); this._autoSave();
+      return;
+    }
     if (!this.selectedObject || !this.dragCompStart) return;
     const comp = this.selectedObject;
     const newState = comp.type === 'smd'
@@ -2119,6 +2157,15 @@ class App {
         c.w = c.h; c.h = oldW;
         c.gx = Math.round(newCenterX - (c.w - 1) / 2);
         c.gy = Math.round(newCenterY - (c.h - 1) / 2);
+        // 引脚标签跟随旋转: 旧(dx,dy)→新(oldH-1-dy, dx)
+        if (c.pinLabels) {
+          const newLabels = {};
+          for (const [key, label] of Object.entries(c.pinLabels)) {
+            const [dx, dy] = key.split(',').map(Number);
+            newLabels[`${oldW - 1 - dy},${dx}`] = label;
+          }
+          c.pinLabels = newLabels;
+        }
       }
     }
     const cmd = new Command('旋转多选', () => { return {oldStates}; }, (data) => {
@@ -2262,9 +2309,30 @@ class App {
         if (dir === 'h') { c.gx1 = 2*cx - c.gx1; c.gx2 = 2*cx - c.gx2; }
         else { c.gy1 = 2*cy - c.gy1; c.gy2 = 2*cy - c.gy2; }
       } else {
-        oldStates.push({comp: c, old: {gx: c.gx, gy: c.gy, w: c.w, h: c.h}});
-        if (dir === 'h') { c.gx = 2*cx - (c.gx + c.w - 1); }
-        else { c.gy = 2*cy - (c.gy + c.h - 1); }
+        oldStates.push({comp: c, old: {gx: c.gx, gy: c.gy, w: c.w, h: c.h, pinLabels: c.pinLabels ? JSON.parse(JSON.stringify(c.pinLabels)) : {}}});
+        if (dir === 'h') {
+          c.gx = 2*cx - (c.gx + c.w - 1);
+          // 水平翻转引脚标签: (dx,dy)→(w-1-dx, dy)
+          if (c.pinLabels) {
+            const newLabels = {};
+            for (const [key, label] of Object.entries(c.pinLabels)) {
+              const [dx, dy] = key.split(',').map(Number);
+              newLabels[`${c.w - 1 - dx},${dy}`] = label;
+            }
+            c.pinLabels = newLabels;
+          }
+        } else {
+          c.gy = 2*cy - (c.gy + c.h - 1);
+          // 垂直翻转引脚标签: (dx,dy)→(dx, h-1-dy)
+          if (c.pinLabels) {
+            const newLabels = {};
+            for (const [key, label] of Object.entries(c.pinLabels)) {
+              const [dx, dy] = key.split(',').map(Number);
+              newLabels[`${dx},${c.h - 1 - dy}`] = label;
+            }
+            c.pinLabels = newLabels;
+          }
+        }
       }
     }
     const cmd = new Command(dir==='h'?'水平翻转多选':'垂直翻转多选', () => { return {oldStates}; }, (data) => {
@@ -2808,11 +2876,17 @@ class App {
   // ==================== 渲染循环 ====================
   _startRenderLoop() {
     const loop = () => {
-      this.renderer.render();
+      if (this._needsRender) {
+        this._needsRender = false;
+        this.renderer.render();
+      }
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
   }
+
+  // 标记需要重绘（在model变更/滚动/缩放时调用）
+  _markDirty() { this._needsRender = true; }
 }
 
 // ==================== 启动 ====================
