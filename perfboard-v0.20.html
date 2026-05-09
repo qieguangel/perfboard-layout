@@ -2713,14 +2713,13 @@ class App {
           try {
             const data = JSON.parse(ev.target.result);
             const name = file.name.replace(/\.json$/i, '');
-            // 去重
             const exist = this._workspaceFiles.findIndex(f => f.name === name);
             if (exist >= 0) this._workspaceFiles.splice(exist, 1);
             this._workspaceFiles.push({name, data});
             loaded++;
+            this._saveWorkspace();
+            this._updateWorkspaceUI();
             if (loaded === files.length) {
-              this._saveWorkspace();
-              this._updateWorkspaceUI();
               document.getElementById('status-hint').textContent = `已导入 ${loaded} 个文件到工作区`;
             }
           } catch(err) {}
@@ -2753,10 +2752,17 @@ class App {
   }
 
   // ==================== 文件管理 ====================
-  // 保存：更新当前文件（工作区内覆盖+下载JSON）
+  // 保存：更新当前文件（不弹窗，无名时自动编号；另存为用_saveAs）
   _save() {
-    if (this._currentFile === '未命名' || this._currentFile.startsWith('untitled')) {
-      this._saveAs(); return;
+    // 无名文件自动编号，不弹窗
+    if (this._currentFile === '未命名' || !this._currentFile || (this._currentFile.startsWith('untitled') && this._currentFile !== 'untitled')) {
+      let n = 1, name = 'my-layout';
+      while (this._workspaceFiles.find(f => f.name === name)) { n++; name = 'my-layout' + n; }
+      // 移除旧untitled条目
+      if (this._currentFile && this._currentFile.startsWith('untitled')) {
+        this._workspaceFiles = this._workspaceFiles.filter(f => f.name !== this._currentFile);
+      }
+      this._currentFile = name;
     }
     this._downloadJSON(this._currentFile + '.json');
     const exist = this._workspaceFiles.findIndex(f => f.name === this._currentFile);
