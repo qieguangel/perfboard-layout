@@ -34,7 +34,8 @@ App.prototype._save = function() {
   this._saveWorkspace();
   this._updateWorkspaceUI();
   this._isDirty = false;
-  this._autoSave();
+  // 清除 session（已保存到 workspace，无需 session 恢复）
+  try { localStorage.removeItem('perfboard_session'); } catch(e) {}
   document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}`;
 };
 
@@ -306,8 +307,8 @@ App.prototype._loadFromStorage = function() {
   this.offsetX = this.canvas.parentElement.clientWidth / 2;
   this.offsetY = this.canvas.parentElement.clientHeight / 2;
 
-  // 无残留会话时，自动加载上次活动文件
-  if (!hasSession && this._workspaceFiles.length > 0) {
+  // 始终自动加载上次活动文件（不因 session 存在而跳过）
+  if (this._workspaceFiles.length > 0) {
     let activeName = null;
     try { activeName = localStorage.getItem('perfboard_active_file'); } catch(e) {}
     const f = this._workspaceFiles.find(x => x.name === activeName) || this._workspaceFiles[0];
@@ -328,7 +329,7 @@ App.prototype._loadFromStorage = function() {
     }
   }
 
-  // 如果有上次会话，显示恢复提示
+  // 如果有上次未保存的会话，显示恢复提示（覆盖已加载的工作区数据）
   if (hasSession) {
     document.getElementById('status-hint').innerHTML = '<span style="cursor:pointer;text-decoration:underline;color:var(--accent);" onclick="app._restoreSession()">点击恢复上次会话</span> | <span style="cursor:pointer;text-decoration:underline;" onclick="app._discardSession()">忽略</span>';
   }

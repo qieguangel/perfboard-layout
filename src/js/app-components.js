@@ -281,7 +281,7 @@ App.prototype._finishRectSelect = function() {
   const y1 = Math.min(r.sy1, r.sy2), y2 = Math.max(r.sy1, r.sy2);
   if (x2 - x1 < 5 && y2 - y1 < 5) { this._selectRect = null; return; } // 太小忽略
 
-  const ids = [];
+  let ids = [];
   for (const comp of this.model.allComponents()) {
     // 获取组件屏幕位置
     let cx, cy;
@@ -297,6 +297,15 @@ App.prototype._finishRectSelect = function() {
     }
     if (cx >= x1 && cx <= x2 && cy >= y1 && cy <= y2) {
       ids.push({type: comp.type, id: comp.id});
+    }
+  }
+  // 过滤：只选中部分编组成员的，全部移除（编组不可部分选中）
+  const selIds = new Set(ids.filter(o => o.type === 'smd' || o.type === 'header').map(o => o.id));
+  for (const grp of this.model.componentGroups) {
+    const inSel = grp.componentIds.filter(id => selIds.has(id));
+    if (inSel.length > 0 && inSel.length < grp.componentIds.length) {
+      // 部分选中 → 移除该组所有成员
+      ids = ids.filter(o => !grp.componentIds.includes(o.id));
     }
   }
   // 框选焊锡走线（走线任一点在矩形内 → 整条加入）

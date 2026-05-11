@@ -80,7 +80,11 @@
 
 ## 版本历史
 
-### v1.4（当前版本）
+### v1.5（当前版本）
+- 修复：框选只部分包含编组成员时不再误移动（整组未全选则全部跳过）
+- 修复：保存按钮真正生效——保存后清除session，刷新后始终自动加载工作区文件
+
+### v1.4
 - 修复：编组水平拖动飞走问题（`_updatePropPanel`拖拽中不再重建`_dragGroupStart`）
 - 修复：飞线直接点击可拖动（初始化`dragCompStart`/`dragMouseStart`+move/undo适配）
 - 修复：页面刷新后自动恢复上次活动文件（`perfboard_active_file`追踪）

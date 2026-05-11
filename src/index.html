@@ -38,7 +38,7 @@
   <button id="btn-home" title="回到原点 (0,0)">🏠 原点</button>
   <span class="sep"></span>
   <button id="btn-features" title="功能介绍">📖 功能介绍</button>
-  <button id="btn-version" title="新版本介绍">🆕 v1.4</button>
+  <button id="btn-version" title="新版本介绍">🆕 v1.5</button>
   <button id="btn-help" title="快捷键说明">?</button>
   <button id="btn-theme" title="切换浅色/深色模式">🌓</button>
   <span class="sep"></span>
@@ -133,12 +133,11 @@
 <div id="version-overlay" class="overlay" onclick="if(event.target===this) this.classList.remove('show')">
   <div class="overlay-panel" style="max-width:500px;">
     <button class="close-btn" onclick="document.getElementById('version-overlay').classList.remove('show')">&times;</button>
-    <h3>v1.4 新版本介绍</h3>
+    <h3>v1.5 新版本介绍</h3>
     <div style="font-size:13px;line-height:1.8;">
-      <p>✅ <b>走线/飞线拖动修复：</b>多选后拖动不再飞走，精准跟随鼠标</p>
-      <p>✅ <b>保存逻辑回正：</b>保存=仅更新工作区(不下载)；另存为=命名+下载</p>
-      <p>✅ <b>切换文件不留痕：</b>选择不保存后清除浏览器session残留</p>
-      <p>📋 <b>v1.3 回顾：</b>框选支持走线飞线、多选拖拽优先、红色边框消除、旋转精度修复、撤回/重做全面加强、保存逻辑重构</p>
+      <p>✅ <b>框选编组保护：</b>框选只部分包含编组成员时不再误移动孤立成员</p>
+      <p>✅ <b>保存真正生效：</b>保存后清除session，刷新页面自动加载工作区文件(不再空白)</p>
+      <p>📋 <b>v1.4 回顾：</b>编组拖动修复、飞线点击拖动、页面刷新自动恢复</p>
     </div>
   </div>
 </div>
