@@ -38,7 +38,7 @@
   <button id="btn-home" title="回到原点 (0,0)">🏠 原点</button>
   <span class="sep"></span>
   <button id="btn-features" title="功能介绍">📖 功能介绍</button>
-  <button id="btn-version" title="新版本介绍">🆕 v1.1</button>
+  <button id="btn-version" title="新版本介绍">🆕 v1.2</button>
   <button id="btn-help" title="快捷键说明">?</button>
   <button id="btn-theme" title="切换浅色/深色模式">🌓</button>
   <span class="sep"></span>
@@ -61,7 +61,7 @@
     <h3 style="margin-top:8px;">📋 器件列表</h3>
     <div id="comp-list"></div>
   </div>
-  <div id="canvas-wrap"><canvas id="canvas" tabindex="0"></canvas></div>
+  <div id="canvas-wrap"><canvas id="canvas" tabindex="0" aria-label="洞洞板布局设计画布"></canvas></div>
 </div>
 
 <div id="prop-panel">
@@ -133,17 +133,13 @@
 <div id="version-overlay" class="overlay" onclick="if(event.target===this) this.classList.remove('show')">
   <div class="overlay-panel" style="max-width:500px;">
     <button class="close-btn" onclick="document.getElementById('version-overlay').classList.remove('show')">&times;</button>
-    <h3>v1.1 新版本介绍</h3>
+    <h3>v1.2 新版本介绍</h3>
     <div style="font-size:13px;line-height:1.8;">
-      <p>✅ <b>焊锡/飞线模式优化：</b>这两种模式下双击不再触发器件命名弹窗</p>
-      <p>✅ <b>界面精简：</b>删除网格大小拖动条（滚轮缩放已覆盖此功能）</p>
-      <p>✅ <b>Edge 浏览器适配：</b>阻止右键手势干扰画布拖动</p>
-      <p>✅ <b>保存可靠性增强：</b>文件切换/操作时多触发点自动保存</p>
-      <p>✅ <b>侧边栏调整：</b>工作区移至器件列表上方</p>
-      <p>✅ <b>工作区智能切换：</b>关闭当前文件后自动切换到相邻文件</p>
-      <p>✅ <b>🏠 原点按钮：</b>一键跳转到格点(0,0)，自动调整缩放</p>
-      <p>✅ <b>📖 功能介绍：</b>随时查看完整功能概览</p>
-      <p>✅ <b>橡皮擦安全提示：</b>切换到橡皮擦模式时显示保存提醒</p>
+      <p>✅ <b>Ctrl+点击自由多选：</b>按住Ctrl点击任意元素（器件+走线+飞线），自由混合选择，再整体旋转/翻转/移动/编组</p>
+      <p>✅ <b>走线/飞线旋转翻转：</b>焊锡走线和飞线现在支持Ctrl+R旋转90° 和 H/V翻转</p>
+      <p>✅ <b>多选渲染优化：</b>焊锡走线和飞线在多选状态下以黄色虚线+端点高亮显示</p>
+      <p>✅ <b>数据架构重构：</b>统一混合多选数据结构，为未来功能扩展打下基础</p>
+      <p>✅ <b>UI优化：</b>按钮按压反馈、焦点环可见性、Canvas无障碍标签</p>
     </div>
   </div>
 </div>
