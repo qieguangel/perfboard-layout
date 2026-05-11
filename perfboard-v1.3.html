@@ -1251,19 +1251,17 @@ App.prototype._onMouseDown = function(e) {
     const hit = this.hitTester.hitAnythingAt(pos.x, pos.y);
     const inSel = hit && this._multiSelObjects.some(o => o.type === hit.type && o.id === hit.id);
     if (inSel) {
-      // 构建组件拖拽组（如有组件）
+      // 构建组件拖拽组（如有组件），无组件时也设空数组触发拖拽
+      this._dragGroupStart = [];
       const compIds = this._getMultiSelCompIds();
-      if (compIds.length > 0) {
-        this._dragGroupStart = [];
-        for (const cid of compIds) {
-          const c = this.model.findById(cid);
-          if (!c) continue;
-          if (c.type === 'smd') this._dragGroupStart.push({comp:c, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
-          else this._dragGroupStart.push({comp:c, gx:c.gx, gy:c.gy});
-        }
-        const rf = this.hitTester.screenToGridFloat(pos.x, pos.y);
-        this.dragMouseStart = {gx: rf.gx, gy: rf.gy};
+      for (const cid of compIds) {
+        const c = this.model.findById(cid);
+        if (!c) continue;
+        if (c.type === 'smd') this._dragGroupStart.push({comp:c, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
+        else this._dragGroupStart.push({comp:c, gx:c.gx, gy:c.gy});
       }
+      const rf = this.hitTester.screenToGridFloat(pos.x, pos.y);
+      this.dragMouseStart = {gx: rf.gx, gy: rf.gy};
       this.selectedObject = null;
       this._updatePropPanel();
       this._updateCompList();
@@ -1405,7 +1403,7 @@ App.prototype._onMouseMove = function(e) {
     }
 
     // 器件/编组/框选移动
-    if ((this.dragCompStart || this._dragGroupStart) && this.selectedObject && elapsed >= LONG_PRESS_MS) {
+    if ((this.dragCompStart || this._dragGroupStart) && (this.selectedObject || this._multiSelObjects.length) && elapsed >= LONG_PRESS_MS) {
       // 框选状态下自动转为临时_dragGroupStart
       const compIds = this._getMultiSelCompIds();
       if (!this._dragGroupStart && compIds.length >= 2) {
