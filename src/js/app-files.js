@@ -23,18 +23,20 @@ App.prototype._save = function() {
     }
     this._currentFile = name;
   }
-  // 保存只更新工作区，不下载文件
+  // 保存：更新工作区 + 下载 JSON（双重保障）
   const exist = this._workspaceFiles.findIndex(f => f.name === this._currentFile);
+  const saveData = this.model.toJSON();
   if (exist >= 0) {
-    this._workspaceFiles[exist].data = this.model.toJSON();
+    this._workspaceFiles[exist].data = saveData;
   } else {
-    this._workspaceFiles.push({name: this._currentFile, data: this.model.toJSON()});
+    this._workspaceFiles.push({name: this._currentFile, data: saveData});
   }
   this._saveWorkspace();
   this._updateWorkspaceUI();
   this._isDirty = false;
   this._autoSave();
-  document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}`;
+  this._downloadJSON(this._currentFile + '.json');
+  document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}.json`;
 };
 
 // 另存为：弹出命名框，下载 JSON 文件
@@ -185,6 +187,8 @@ App.prototype._updateWorkspaceUI = function() {
         if (app._isDirty) {
           if (confirm(`"${app._currentFile}" 有未保存的修改，是否保存后切换？`)) {
             app._save();
+          } else {
+            try { localStorage.removeItem('perfboard_session'); } catch(e) {}
           }
         }
         app._switchToFile(name);

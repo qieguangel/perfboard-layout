@@ -76,6 +76,17 @@ App.prototype._onMouseDown = function(e) {
         if (c.type === 'smd') this._dragGroupStart.push({comp:c, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
         else this._dragGroupStart.push({comp:c, gx:c.gx, gy:c.gy});
       }
+      // 存储走线/飞线原始位置（用于非累积位移）
+      this._dragTraceFW = [];
+      for (const obj of this._multiSelObjects) {
+        if (obj.type === 'trace') {
+          const t = this.model.solderTraces.find(tr => tr.id === obj.id);
+          if (t) this._dragTraceFW.push({type:'trace', id:t.id, pts: t.points.map(p=>({gx:p.gx,gy:p.gy}))});
+        } else if (obj.type === 'flywire') {
+          const f = this.model.flyWires.find(fw => fw.id === obj.id);
+          if (f) this._dragTraceFW.push({type:'flywire', id:f.id, from:{gx:f.from.gx,gy:f.from.gy}, to:{gx:f.to.gx,gy:f.to.gy}});
+        }
+      }
       const rf = this.hitTester.screenToGridFloat(pos.x, pos.y);
       this.dragMouseStart = {gx: rf.gx, gy: rf.gy};
       this.selectedObject = null;

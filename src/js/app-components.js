@@ -39,14 +39,16 @@ App.prototype._moveComponentToCursor = function(pos) {
     }
   }
 
-  // 多选中的走线/飞线移动
-  for (const obj of this._multiSelObjects) {
-    if (obj.type === 'trace') {
-      const t = this.model.solderTraces.find(tr => tr.id === obj.id);
-      if (t) for (const pt of t.points) { pt.gx += dgx; pt.gy += dgy; }
-    } else if (obj.type === 'flywire') {
-      const f = this.model.flyWires.find(fw => fw.id === obj.id);
-      if (f) { f.from.gx += dgx; f.from.gy += dgy; f.to.gx += dgx; f.to.gy += dgy; }
+  // 多选中的走线/飞线移动（从原始位置计算，非累积）
+  if (this._dragTraceFW) {
+    for (const s of this._dragTraceFW) {
+      if (s.type === 'trace') {
+        const t = this.model.solderTraces.find(tr => tr.id === s.id);
+        if (t) for (let i = 0; i < t.points.length; i++) { t.points[i].gx = s.pts[i].gx + dgx; t.points[i].gy = s.pts[i].gy + dgy; }
+      } else if (s.type === 'flywire') {
+        const f = this.model.flyWires.find(fw => fw.id === s.id);
+        if (f) { f.from.gx = s.from.gx + dgx; f.from.gy = s.from.gy + dgy; f.to.gx = s.to.gx + dgx; f.to.gy = s.to.gy + dgy; }
+      }
     }
   }
 
@@ -103,6 +105,7 @@ App.prototype._finishComponentMove = function() {
       }
     });
     this._dragGroupStart = null;
+    this._dragTraceFW = null;
     this._updatePropPanel(); this._updateCompList(); this._autoSave();
     return;
   }
@@ -499,6 +502,7 @@ App.prototype._cancelAll = function() {
   this.dragSegStartPoints = null;
   this.dragCompStart = null;
   this.dragMouseStart = null;
+  this._dragTraceFW = null;
   this.selectedObject = null;
   this.isDragging = false;
   this.mouseDown = false;
