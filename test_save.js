@@ -166,4 +166,77 @@ const left5 = model5.headerComponents.find(h => h.name === 'M0左');
 assert(left5.gx === -20, '不保存刷新M0左gx应=-20(原值)，实际=' + left5.gx);
 assert(model5.smdComponents.length === 0, '不保存刷新应无贴片器件');
 
-console.log('\n===== 全部测试通过 =====');
+// ====== 测试 6：toJSON 返回深拷贝（修改原模型不影响已保存数据） ======
+console.log('\n=== 测试 6: toJSON深拷贝验证 ===');
+localStorage.clear();
+app._workspaceFiles = [{ name: 'deep', data: JSON.parse(JSON.stringify(m0Data)) }];
+app._switchToFile('deep');
+app.model.headerComponents[0].gx = 999;
+const saved = app.model.toJSON();
+app.model.headerComponents[0].gx = 0; // 修改原模型
+assert(saved.headerComponents[0].gx === 999, 'toJSON深拷贝保护——修改模型不影响已导出数据，期望999实际=' + saved.headerComponents[0].gx);
+
+// ====== 测试 7：保存→导出JSON→写入磁盘→重新加载→验证 ======
+console.log('\n=== 测试 7: 完整保存-导出-重载+持久化循环 ===');
+localStorage.clear();
+const cleanData = JSON.parse(JSON.stringify(m0Data));
+app._workspaceFiles = [{ name: 'roundtrip', data: cleanData }];
+app._switchToFile('roundtrip');
+app._isDirty = false;
+
+// 修改：添加排针+贴片+走线+飞线
+const newHdr = { id: 'el_new_hdr', type: 'header', name: 'J99', gx: 5, gy: 5, w: 3, h: 2, pinLabels: {'0,0':'VCC'}, groupId: null };
+app.model.headerComponents.push(newHdr);
+const newSmd = { id: 'el_new_smd', type: 'smd', name: 'R99', gx1: 10, gy1: 10, gx2: 11, gy2: 10 };
+app.model.smdComponents.push(newSmd);
+const newTrace = { id: 'el_new_tr', points: [{gx:0,gy:0},{gx:5,gy:0},{gx:5,gy:5}] };
+app.model.solderTraces.push(newTrace);
+const newFw = { id: 'el_new_fw', from: {gx:0,gy:0}, to: {gx:10,gy:10} };
+app.model.flyWires.push(newFw);
+app._isDirty = true;
+
+// 保存
+app._save();
+assert(app._isDirty === false, '保存后_isDirty应为false');
+
+// 导出 JSON（模拟另存为的下载）
+const exportedJson = app.model.toJSON();
+const exportedStr = JSON.stringify(exportedJson, null, 2);
+const exportedParsed = JSON.parse(exportedStr);
+assert(exportedParsed.headerComponents.length === 3, '导出JSON应有3个排针(原有2+新增1)，实际=' + exportedParsed.headerComponents.length);
+assert(exportedParsed.smdComponents.length === 1, '导出JSON应有1个贴片');
+assert(exportedParsed.solderTraces.length === 1, '导出JSON应有1条焊锡走线');
+assert(exportedParsed.flyWires.length === 1, '导出JSON应有1条飞线');
+
+// 模拟"另存为"写入磁盘 → 清除 → 重新导入
+const savedJson = JSON.parse(exportedStr);
+localStorage.clear();
+localStorage.setItem('perfboard_workspace', JSON.stringify([{name:'imported', data: savedJson}]));
+localStorage.setItem('perfboard_active_file', 'imported');
+const wsReload = JSON.parse(localStorage.getItem('perfboard_workspace'));
+const fReload = wsReload.find(x => x.name === 'imported');
+const modelReload = new DataModel();
+modelReload.fromJSON(fReload.data);
+assert(modelReload.headerComponents.length === 3, '重新导入后应有3个排针，实际=' + modelReload.headerComponents.length);
+assert(modelReload.smdComponents.length === 1, '重新导入后应有1个贴片');
+assert(modelReload.solderTraces.length === 1, '重新导入后应有1条焊锡走线');
+assert(modelReload.flyWires.length === 1, '重新导入后应有1条飞线');
+assert(modelReload.headerComponents.find(h => h.name === 'J99'), '重新导入后应找到J99');
+
+// ====== 测试 8：多次保存保持数据一致性 ======
+console.log('\n=== 测试 8: 多次保存验证 ===');
+localStorage.clear();
+const base = JSON.parse(JSON.stringify(m0Data));
+app._workspaceFiles = [{ name: 'multisave', data: base }];
+app._switchToFile('multisave');
+app._isDirty = false;
+for (let i = 0; i < 3; i++) {
+  app.model.smdComponents.push({ id: 'el_save' + i, type: 'smd', name: 'R' + (10+i), gx1: i, gy1: 0, gx2: i+1, gy2: 0 });
+  app._isDirty = true;
+  app._save();
+  const wsCheck = JSON.parse(localStorage.getItem('perfboard_workspace'));
+  assert(wsCheck[0].data.smdComponents.length === i + 1, '第'+(i+1)+'次保存后应有'+(i+1)+'个贴片');
+}
+assert(app._isDirty === false, '3次保存后_isDirty应为false');
+
+console.log('\n===== 全部测试通过(' + (new Date().toISOString()) + ') =====');
