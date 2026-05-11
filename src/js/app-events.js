@@ -403,23 +403,21 @@ App.prototype._onKeyDown = function(e) {
       document.getElementById('status-hint').textContent = '焊锡走线已取消';
     }
   }
+};
 
-  // Ctrl+点击多选切换
-  _toggleMultiSelect(hit) {
-    const idx = this._multiSelObjects.findIndex(
-      o => o.type === hit.type && o.id === hit.id
-    );
-    if (idx >= 0) {
-      // 已选中 → 移除
-      this._multiSelObjects.splice(idx, 1);
-    } else {
-      // 未选中 → 添加
-      this._multiSelObjects.push({type: hit.type, id: hit.id});
-    }
-    if (this._multiSelObjects.length === 0) {
-      this.selectedObject = null;
-    } else {
-      this.selectedObject = null; // 多选活跃时无单选
-    }
+// Ctrl+点击多选切换
+App.prototype._toggleMultiSelect = function(hit) {
+  const idx = this._multiSelObjects.findIndex(
+    o => o.type === hit.type && o.id === hit.id
+  );
+  if (idx >= 0) {
+    this._multiSelObjects.splice(idx, 1);
+  } else {
+    this._multiSelObjects.push({type: hit.type, id: hit.id});
+  }
+  if (this._multiSelObjects.length === 0) {
+    this.selectedObject = null;
+  } else {
+    this.selectedObject = null;
   }
 };
