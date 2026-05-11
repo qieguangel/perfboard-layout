@@ -18,7 +18,7 @@ App.prototype._moveComponentToCursor = function(pos) {
   const dgx = Math.round(rf.gx - this.dragMouseStart.gx);
   const dgy = Math.round(rf.gy - this.dragMouseStart.gy);
 
-  // 组拖拽
+  // 组拖拽（组件部分）
   if (this._dragGroupStart) {
     for (const item of this._dragGroupStart) {
       if (item.gx1 !== undefined) {
@@ -28,22 +28,49 @@ App.prototype._moveComponentToCursor = function(pos) {
         item.comp.gx = item.gx + dgx; item.comp.gy = item.gy + dgy;
       }
     }
-    return;
+  } else if (this.selectedObject && this.dragCompStart) {
+    const comp = this.selectedObject;
+    const start = this.dragCompStart;
+    if (comp.type === 'smd') {
+      comp.gx1 = start.gx1 + dgx; comp.gy1 = start.gy1 + dgy;
+      comp.gx2 = start.gx2 + dgx; comp.gy2 = start.gy2 + dgy;
+    } else if (comp.type === 'header') {
+      comp.gx = start.gx + dgx; comp.gy = start.gy + dgy;
+    }
   }
 
-  if (!this.selectedObject || !this.dragCompStart) return;
-  const comp = this.selectedObject;
-  const start = this.dragCompStart;
-  if (comp.type === 'smd') {
-    comp.gx1 = start.gx1 + dgx; comp.gy1 = start.gy1 + dgy;
-    comp.gx2 = start.gx2 + dgx; comp.gy2 = start.gy2 + dgy;
-  } else if (comp.type === 'header') {
-    comp.gx = start.gx + dgx; comp.gy = start.gy + dgy;
+  // 多选中的走线/飞线移动
+  for (const obj of this._multiSelObjects) {
+    if (obj.type === 'trace') {
+      const t = this.model.solderTraces.find(tr => tr.id === obj.id);
+      if (t) for (const pt of t.points) { pt.gx += dgx; pt.gy += dgy; }
+    } else if (obj.type === 'flywire') {
+      const f = this.model.flyWires.find(fw => fw.id === obj.id);
+      if (f) { f.from.gx += dgx; f.from.gy += dgy; f.to.gx += dgx; f.to.gy += dgy; }
+    }
   }
+
+  if (!this._dragGroupStart && (!this.selectedObject || !this.dragCompStart) && this._multiSelObjects.length === 0) return;
   this._updatePropPanel();
 };
 
 App.prototype._finishComponentMove = function() {
+  // 快照多选中的走线/飞线当前位置
+  const traceSnaps = [], fwSnaps = [];
+  for (const obj of this._multiSelObjects) {
+    if (obj.type === 'trace') {
+      const t = this.model.solderTraces.find(tr => tr.id === obj.id);
+      if (t) traceSnaps.push({id: t.id, pts: t.points.map(p => ({gx:p.gx, gy:p.gy}))});
+    } else if (obj.type === 'flywire') {
+      const f = this.model.flyWires.find(fw => fw.id === obj.id);
+      if (f) fwSnaps.push({id: f.id, from:{gx:f.from.gx, gy:f.from.gy}, to:{gx:f.to.gx, gy:f.to.gy}});
+    }
+  }
+
+  const makeCmd = (label, applyFn, undoFn) => {
+    this.cmdMgr.execute(new Command(label, applyFn, undoFn));
+  };
+
   // 组拖拽完成
   if (this._dragGroupStart) {
     const oldItems = this._dragGroupStart.map(item => {
@@ -54,20 +81,27 @@ App.prototype._finishComponentMove = function() {
       if (item.gx1 !== undefined) return {comp:item.comp, gx1:item.comp.gx1, gy1:item.comp.gy1, gx2:item.comp.gx2, gy2:item.comp.gy2};
       return {comp:item.comp, gx:item.comp.gx, gy:item.comp.gy};
     });
-    const that = this;
-    const cmd = new Command('移动编组', () => {
+    const tSnaps = traceSnaps, fSnaps = fwSnaps;
+    makeCmd('移动编组', () => {
       for (const n of newItems) {
         if (n.gx1 !== undefined) { n.comp.gx1=n.gx1; n.comp.gy1=n.gy1; n.comp.gx2=n.gx2; n.comp.gy2=n.gy2; }
         else { n.comp.gx=n.gx; n.comp.gy=n.gy; }
       }
-      return {oldItems};
+      return {oldItems, tSnaps, fSnaps};
     }, (data) => {
       for (const o of data.oldItems) {
         if (o.gx1 !== undefined) { o.comp.gx1=o.gx1; o.comp.gy1=o.gy1; o.comp.gx2=o.gx2; o.comp.gy2=o.gy2; }
         else { o.comp.gx=o.gx; o.comp.gy=o.gy; }
       }
+      for (const s of data.tSnaps) {
+        const t = this.model.solderTraces.find(tr => tr.id === s.id);
+        if (t) t.points = s.pts.map(p => ({gx:p.gx, gy:p.gy}));
+      }
+      for (const s of data.fSnaps) {
+        const f = this.model.flyWires.find(fw => fw.id === s.id);
+        if (f) { f.from.gx=s.from.gx; f.from.gy=s.from.gy; f.to.gx=s.to.gx; f.to.gy=s.to.gy; }
+      }
     });
-    this.cmdMgr.execute(cmd);
     this._dragGroupStart = null;
     this._updatePropPanel(); this._updateCompList(); this._autoSave();
     return;
