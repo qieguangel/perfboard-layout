@@ -4,6 +4,26 @@
 
 **版本记录规则：每写一个新版本时，将该版本的修改总结写进 README 该版本条目。同时，将用户报告的上一版本 bug 写进上一版本的 README 介绍中（如 v0.12 的 bug 写在 v0.12 条目里，修复写在 v0.13 里）。这样每个版本的 README 条目既包含该版本的新功能，也包含该版本的已知问题。**
 
+## ⚠️ 开发方式与最小化修改原则（极其重要！）
+
+**本项目采用多级文件架构进行本地开发，构建后合并为单文件分发：**
+
+- **开发目录**：`src/` — 多文件结构（`index.html` + `css/style.css` + `js/*.js` 共15个文件），提高架构清晰度和开发效率
+- **构建脚本**：`build.py` — Python 零依赖构建脚本，将 `src/` 下的多文件合并为 `dist/perfboard-vX.X.html`
+- **分发文件**：`dist/perfboard-vX.X.html` — 合并后的单 HTML 文件，双击即用
+- **构建命令**：`python build.py vX.X`
+
+**⚠️ 最小化修改原则（严格遵守！违反将导致进度倒退！）：**
+
+1. **已验证无误的功能，在未提出相关修改要求时，绝对不能擅自修改！**
+2. 只修改与当前需求直接相关的代码，不要顺手改无关代码
+3. 不要重构已经正常工作的代码（即使觉得不够优雅）
+4. 不要添加未要求的功能或优化
+5. 修改前先确认影响的代码范围，只改必须改的部分
+6. 历史反复出 bug 的功能（焊锡走线、编组拖拽、橡皮擦 Undo、文件管理）修改时要格外谨慎，改完后必须验证相关交互流程
+
+**此原则的教训**：此前发生过因擅自修改已验证功能导致大量 bug 回归、开发进度严重倒退的事故。务必吸取教训！
+
 ## 项目概述
 
 单文件 HTML 应用（`perfboard-v1.0.html`），零依赖，浏览器直接打开即用。用于设计洞洞板（perfboard）的元器件布局和走线。
@@ -19,7 +39,28 @@
 
 ```
 /
-├── perfboard-v1.0.html      ← 当前最新版
+├── perfboard-v1.0.html      ← 当前最新版（v1.0，旧版根目录单文件）
+├── build.py                 ← Python 构建脚本（零依赖）
+├── src/                     ← 多文件开发目录（v1.1+）
+│   ├── index.html           ← 开发用模板（外部 link/script 引用）
+│   ├── css/
+│   │   └── style.css        ← 全部 CSS
+│   └── js/
+│       ├── constants.js     ← 常量 + uid() + distToSeg() + roundRect polyfill
+│       ├── datamodel.js     ← DataModel 类
+│       ├── hittester.js     ← HitTester 类
+│       ├── command.js       ← Command 基类 + CommandManager 类
+│       ├── renderer.js      ← Renderer 类
+│       ├── app-core.js      ← App 构造函数 + _init + 生命周期（唯一 class App 声明）
+│       ├── app-events.js    ← 鼠标/滚轮/双击/键盘事件处理
+│       ├── app-solder.js    ← 焊锡走线全部逻辑
+│       ├── app-components.js← 器件放置/移动/编组/框选/橡皮擦
+│       ├── app-edit.js      ← 撤销/重做/剪贴板/删除/旋转/翻转
+│       ├── app-ui.js        ← 模式切换/属性面板/组件列表/状态栏/工具栏
+│       ├── app-files.js     ← 文件管理/工作区/主题/会话恢复
+│       └── main.js          ← const app = new App(); 启动
+├── dist/                    ← 构建输出（gitignore）
+│   └── perfboard-vX.X.html
 ├── README.md
 ├── CLAUDE.md
 ├── .gitignore

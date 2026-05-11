@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>洞洞板布局工具 (DEV)</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="toolbar">
+  <div class="group">
+    <button id="btn-select" class="active" title="选择/移动 (1)">▶ 选择</button>
+    <button id="btn-smd" title="放置贴片器件 (2)">◧ 贴片</button>
+    <button id="btn-header" title="放置排针/排座 (3)">▣ 排针</button>
+    <button id="btn-flywire" title="放置飞线 (4)">∼ 飞线</button>
+    <button id="btn-solder" title="焊锡走线 (5)">━ 焊锡</button>
+    <button id="btn-eraser" title="橡皮擦 (6)">⌫ 橡皮擦</button>
+  </div>
+  <span class="sep"></span>
+  <div class="group">
+    <button id="btn-undo" title="撤销 (Ctrl+Z)">↩ 撤销</button>
+    <button id="btn-redo" title="重做 (Ctrl+Y)">↪ 重做</button>
+  </div>
+  <span class="sep"></span>
+  <div class="group">
+    <button id="btn-delete" title="删除 (Delete)">✕ 删除</button>
+    <button id="btn-rotate" title="旋转 (Ctrl+R)">↻ 旋转</button>
+    <button id="btn-fliph" title="水平翻转 (H)">⇔ 水平翻转</button>
+    <button id="btn-flipv" title="垂直翻转 (V)">⇕ 垂直翻转</button>
+  </div>
+  <span class="sep"></span>
+  <div class="group">
+    <button id="btn-group" title="将选中器件编组 (G)">🔗 编组</button>
+    <button id="btn-ungroup" title="拆分选中组 (U)">💔 拆组</button>
+  </div>
+  <span class="sep"></span>
+  <button id="btn-home" title="回到原点 (0,0)">🏠 原点</button>
+  <span class="sep"></span>
+  <button id="btn-features" title="功能介绍">📖 功能介绍</button>
+  <button id="btn-version" title="新版本介绍">🆕 v1.1</button>
+  <button id="btn-help" title="快捷键说明">?</button>
+  <button id="btn-theme" title="切换浅色/深色模式">🌓</button>
+  <span class="sep"></span>
+  <button id="btn-newfile" title="新建空白布局">+ 新建</button>
+  <button id="btn-openfile" title="打开JSON文件">📂 打开</button>
+  <button id="btn-save" title="保存当前文件 (Ctrl+S)">💾 保存</button>
+  <button id="btn-saveas" title="另存为新文件">📥 另存为</button>
+  <input type="file" id="open-file-input" accept=".json" style="display:none">
+</div>
+
+<div id="main-area">
+  <div id="sidebar">
+    <h3>📁 工作区</h3>
+    <div id="workspace-list" style="font-size:11px;padding:4px;"></div>
+    <div style="padding:4px;display:flex;gap:4px;">
+      <button id="btn-ws-import" style="flex:1;font-size:10px;padding:3px 6px;background:var(--btn-bg);color:var(--btn-text);border:1px solid var(--border);border-radius:3px;cursor:pointer;">导入文件</button>
+      <button id="btn-ws-clear" style="flex:1;font-size:10px;padding:3px 6px;background:var(--btn-bg);color:var(--btn-text);border:1px solid var(--border);border-radius:3px;cursor:pointer;">清空列表</button>
+    </div>
+    <input type="file" id="ws-file-input" accept=".json" multiple style="display:none">
+    <h3 style="margin-top:8px;">📋 器件列表</h3>
+    <div id="comp-list"></div>
+  </div>
+  <div id="canvas-wrap"><canvas id="canvas" tabindex="0"></canvas></div>
+</div>
+
+<div id="prop-panel">
+  <h4>属性</h4>
+  <div class="row"><label>名称</label><input id="prop-name"></div>
+  <div class="row" id="prop-type-row"><label>类型</label><span id="prop-type"></span></div>
+  <div class="row" id="prop-pos-row"><label>位置</label><span id="prop-pos"></span></div>
+  <div class="row" id="prop-color-row" style="display:none"><label>颜色</label><input type="color" id="prop-color" value="#e94560"></div>
+  <div id="prop-pins-row" style="display:none"><label style="color:#999;margin-bottom:4px;">引脚标签 (双击画布上引脚编辑)</label><div id="prop-pins" style="font-size:10px;color:#aaa;max-height:100px;overflow-y:auto;"></div></div>
+  <button id="prop-apply">应用</button>
+</div>
+
+<div id="help-overlay" class="overlay" onclick="if(event.target===this) this.classList.remove('show')">
+  <div id="help-panel" class="overlay-panel">
+    <button class="close-btn" onclick="document.getElementById('help-overlay').classList.remove('show')">&times;</button>
+    <h3>快捷键说明</h3>
+    <table>
+      <tr><td>1 / 2 / 3 / 4 / 5 / 6</td><td>切换模式：选择 / 贴片 / 排针 / 飞线 / 焊锡 / 橡皮擦</td></tr>
+      <tr><td>滚轮</td><td>缩放画布（以鼠标为中心）</td></tr>
+      <tr><td>右键拖动</td><td>平移画布</td></tr>
+      <tr><td>左键短按</td><td>选中器件 / 焊锡段 / 飞线</td></tr>
+      <tr><td>左键长按器件</td><td>拖动移动器件</td></tr>
+      <tr><td>左键拖动空白</td><td>矩形框选</td></tr>
+      <tr><td>双击器件</td><td>编辑器件名称</td></tr>
+      <tr><td>双击排针引脚</td><td>标注引脚标签</td></tr>
+      <tr><td>焊锡模式</td><td>双击开始 / 单击固定段 / 双击结束</td></tr>
+      <tr><td>焊锡模式 Enter</td><td>完成当前焊锡走线</td></tr>
+      <tr><td>Ctrl+Z / Ctrl+Y</td><td>撤销 / 重做</td></tr>
+      <tr><td>Ctrl+C / Ctrl+V / Ctrl+X</td><td>复制 / 粘贴 / 剪切</td></tr>
+      <tr><td>Ctrl+R</td><td>旋转选中器件 / 编组 90°</td></tr>
+      <tr><td>Ctrl+S</td><td>保存当前文件（更新工作区）</td></tr>
+      <tr><td>G / U</td><td>编组 / 拆组</td></tr>
+      <tr><td>H / V</td><td>水平 / 垂直翻转</td></tr>
+      <tr><td>Delete</td><td>删除选中对象 / 焊锡段</td></tr>
+      <tr><td>Escape</td><td>取消操作 / 取消选中</td></tr>
+      <tr><td>?</td><td>显示此快捷键帮助</td></tr>
+      <tr><td>🌓</td><td>切换深色/浅色主题</td></tr>
+    </table>
+  </div>
+</div>
+
+<div id="features-overlay" class="overlay" onclick="if(event.target===this) this.classList.remove('show')">
+  <div class="overlay-panel" style="max-width:600px;">
+    <button class="close-btn" onclick="document.getElementById('features-overlay').classList.remove('show')">&times;</button>
+    <h3>功能介绍</h3>
+    <div style="font-size:13px;line-height:1.7;">
+      <h4 style="margin:8px 0 4px;">走线</h4>
+      <p><b>焊锡走线：</b>曼哈顿路径（上下左右），焊锡模式(5)双击开始/单击固定段/双击结束；自动合并相接走线</p>
+      <p><b>飞线：</b>飞线模式(4)点击两格点创建虚线连接</p>
+      <h4 style="margin:8px 0 4px;">元器件</h4>
+      <p><b>贴片器件：</b>贴片模式(2)点击相邻两格点放置，位于格点之间，可标注名称</p>
+      <p><b>排针/排座：</b>排针模式(3)拖动矩形放置，每格点对应一个引脚，可逐个标注引脚标签</p>
+      <p><b>器件编组：</b>框选后按 G 编组（整体拖动/旋转/翻转），按 U 拆组</p>
+      <h4 style="margin:8px 0 4px;">编辑</h4>
+      <p><b>框选：</b>选择模式下拖动矩形框选器件</p>
+      <p><b>焊锡段选中：</b>点击焊锡段选中（橙色高亮），可拖动移动、Delete 删段</p>
+      <p><b>橡皮擦：</b>橡皮擦模式(6)长按拖拽擦除器件/焊锡段</p>
+      <p><b>焊锡线属性：</b>选中焊锡线/段后右侧面板修改颜色和名称</p>
+      <h4 style="margin:8px 0 4px;">文件管理</h4>
+      <p><b>💾 保存 / Ctrl+S：</b>更新工作区（不弹窗，不下载文件）</p>
+      <p><b>📥 另存为：</b>弹窗命名 + 下载 .json 文件</p>
+      <p><b>侧边栏工作区：</b>点击文件切换（自动保存当前）、× 删除</p>
+      <p>关闭浏览器时自动存 localStorage，下次打开恢复</p>
+    </div>
+  </div>
+</div>
+
+<div id="version-overlay" class="overlay" onclick="if(event.target===this) this.classList.remove('show')">
+  <div class="overlay-panel" style="max-width:500px;">
+    <button class="close-btn" onclick="document.getElementById('version-overlay').classList.remove('show')">&times;</button>
+    <h3>v1.1 新版本介绍</h3>
+    <div style="font-size:13px;line-height:1.8;">
+      <p>✅ <b>焊锡/飞线模式优化：</b>这两种模式下双击不再触发器件命名弹窗</p>
+      <p>✅ <b>界面精简：</b>删除网格大小拖动条（滚轮缩放已覆盖此功能）</p>
+      <p>✅ <b>Edge 浏览器适配：</b>阻止右键手势干扰画布拖动</p>
+      <p>✅ <b>保存可靠性增强：</b>文件切换/操作时多触发点自动保存</p>
+      <p>✅ <b>侧边栏调整：</b>工作区移至器件列表上方</p>
+      <p>✅ <b>工作区智能切换：</b>关闭当前文件后自动切换到相邻文件</p>
+      <p>✅ <b>🏠 原点按钮：</b>一键跳转到格点(0,0)，自动调整缩放</p>
+      <p>✅ <b>📖 功能介绍：</b>随时查看完整功能概览</p>
+      <p>✅ <b>橡皮擦安全提示：</b>切换到橡皮擦模式时显示保存提醒</p>
+    </div>
+  </div>
+</div>
+
+<div id="toast" style="display:none;position:fixed;top:60px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:8px 20px;border-radius:6px;font-size:13px;z-index:9999;pointer-events:none;transition:opacity 0.3s;"></div>
+
+<div id="statusbar">
+  <span id="status-mode">模式: 选择</span>
+  <span id="status-pos">坐标: -</span>
+  <span id="status-zoom">缩放: 100%</span>
+  <span id="status-hint"></span>
+</div>
+
+<script src="js/constants.js"></script>
+<script src="js/datamodel.js"></script>
+<script src="js/hittester.js"></script>
+<script src="js/command.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/app-core.js"></script>
+<script src="js/app-events.js"></script>
+<script src="js/app-solder.js"></script>
+<script src="js/app-components.js"></script>
+<script src="js/app-edit.js"></script>
+<script src="js/app-ui.js"></script>
+<script src="js/app-files.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
