@@ -50,22 +50,25 @@ class DataModel {
   }
 
   toJSON() {
-    return {
+    // 深拷贝：防止外部修改污染工作区已保存数据
+    return JSON.parse(JSON.stringify({
       smdComponents: this.smdComponents,
       headerComponents: this.headerComponents,
       solderTraces: this.solderTraces,
       flyWires: this.flyWires,
       componentGroups: this.componentGroups,
-    };
+    }));
   }
 
   fromJSON(data) {
+    // 深拷贝：防止加载的数据与工作区源数据共享引用
     if (!data) return;
-    this.smdComponents = data.smdComponents || [];
-    this.headerComponents = data.headerComponents || [];
-    this.solderTraces = data.solderTraces || [];
-    this.flyWires = data.flyWires || [];
-    this.componentGroups = data.componentGroups || [];
+    const clone = JSON.parse(JSON.stringify(data));
+    this.smdComponents = clone.smdComponents || [];
+    this.headerComponents = clone.headerComponents || [];
+    this.solderTraces = clone.solderTraces || [];
+    this.flyWires = clone.flyWires || [];
+    this.componentGroups = clone.componentGroups || [];
     _idCounter = Math.max(...this._allIds(), 0) + 1;
   }
 
