@@ -144,7 +144,7 @@ canvas { display:block; position:absolute; top:0; left:0; outline:none; touch-ac
   <button id="btn-home" title="回到原点 (0,0)">🏠 原点</button>
   <span class="sep"></span>
   <button id="btn-features" title="功能介绍">📖 功能介绍</button>
-  <button id="btn-version" title="新版本介绍">🆕 v1.3</button>
+  <button id="btn-version" title="新版本介绍">🆕 v1.4</button>
   <button id="btn-help" title="快捷键说明">?</button>
   <button id="btn-theme" title="切换浅色/深色模式">🌓</button>
   <span class="sep"></span>
@@ -239,14 +239,12 @@ canvas { display:block; position:absolute; top:0; left:0; outline:none; touch-ac
 <div id="version-overlay" class="overlay" onclick="if(event.target===this) this.classList.remove('show')">
   <div class="overlay-panel" style="max-width:500px;">
     <button class="close-btn" onclick="document.getElementById('version-overlay').classList.remove('show')">&times;</button>
-    <h3>v1.3 新版本介绍</h3>
+    <h3>v1.4 新版本介绍</h3>
     <div style="font-size:13px;line-height:1.8;">
-      <p>✅ <b>框选升级：</b>矩形框选现在支持焊锡走线和飞线，区域内即加入多选</p>
-      <p>✅ <b>拖拽优先级：</b>Ctrl多选走线后拖动走整体移动，不再误触段拖拽</p>
-      <p>✅ <b>红色边框消除：</b>数字键1-6不再触发画布focus-visible红色框</p>
-      <p>✅ <b>旋转精度修复：</b>排针旋转多次不再累积位移（中心公式修正）</p>
-      <p>✅ <b>撤回/重做全面加强：</b>编组、拆组、改名、引脚标注全部支持Ctrl+Z/Ctrl+Y</p>
-      <p>✅ <b>保存逻辑重构：</b>不保存真的不保存，保存真的保存；事件委托防监听器累积</p>
+      <p>✅ <b>走线/飞线拖动修复：</b>多选后拖动不再飞走，精准跟随鼠标</p>
+      <p>✅ <b>保存逻辑回正：</b>保存=仅更新工作区(不下载)；另存为=命名+下载</p>
+      <p>✅ <b>切换文件不留痕：</b>选择不保存后清除浏览器session残留</p>
+      <p>📋 <b>v1.3 回顾：</b>框选支持走线飞线、多选拖拽优先、红色边框消除、旋转精度修复、撤回/重做全面加强、保存逻辑重构</p>
     </div>
   </div>
 </div>
@@ -3272,7 +3270,7 @@ App.prototype._save = function() {
     }
     this._currentFile = name;
   }
-  // 保存：更新工作区 + 下载 JSON（双重保障）
+  // 保存：仅更新工作区，不下载文件
   const exist = this._workspaceFiles.findIndex(f => f.name === this._currentFile);
   const saveData = this.model.toJSON();
   if (exist >= 0) {
@@ -3284,8 +3282,7 @@ App.prototype._save = function() {
   this._updateWorkspaceUI();
   this._isDirty = false;
   this._autoSave();
-  this._downloadJSON(this._currentFile + '.json');
-  document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}.json`;
+  document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}`;
 };
 
 // 另存为：弹出命名框，下载 JSON 文件

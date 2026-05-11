@@ -23,7 +23,7 @@ App.prototype._save = function() {
     }
     this._currentFile = name;
   }
-  // 保存：更新工作区 + 下载 JSON（双重保障）
+  // 保存：仅更新工作区，不下载文件
   const exist = this._workspaceFiles.findIndex(f => f.name === this._currentFile);
   const saveData = this.model.toJSON();
   if (exist >= 0) {
@@ -35,8 +35,7 @@ App.prototype._save = function() {
   this._updateWorkspaceUI();
   this._isDirty = false;
   this._autoSave();
-  this._downloadJSON(this._currentFile + '.json');
-  document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}.json`;
+  document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}`;
 };
 
 // 另存为：弹出命名框，下载 JSON 文件
