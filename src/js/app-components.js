@@ -245,10 +245,32 @@ App.prototype._finishRectSelect = function() {
       ids.push({type: comp.type, id: comp.id});
     }
   }
+  // 框选焊锡走线（走线任一点在矩形内 → 整条加入）
+  for (const trace of this.model.solderTraces) {
+    let inRect = false;
+    for (const pt of trace.points) {
+      const p = this.hitTester.gridToScreen(pt.gx, pt.gy);
+      if (p.sx >= x1 && p.sx <= x2 && p.sy >= y1 && p.sy <= y2) { inRect = true; break; }
+    }
+    if (inRect) ids.push({type: 'trace', id: trace.id});
+  }
+  // 框选飞线（两端点都在矩形内 → 加入）
+  for (const fw of this.model.flyWires) {
+    const a = this.hitTester.gridToScreen(fw.from.gx, fw.from.gy);
+    const b = this.hitTester.gridToScreen(fw.to.gx, fw.to.gy);
+    if (a.sx >= x1 && a.sx <= x2 && a.sy >= y1 && a.sy <= y2 &&
+        b.sx >= x1 && b.sx <= x2 && b.sy >= y1 && b.sy <= y2) {
+      ids.push({type: 'flywire', id: fw.id});
+    }
+  }
   this._multiSelObjects = ids;
   if (ids.length > 0) {
     this.selectedObject = null;
-    document.getElementById('status-hint').textContent = `已框选 ${ids.length} 个器件 | G编组 G拆组`;
+    const cc = ids.filter(o => o.type === 'smd' || o.type === 'header').length;
+    const tc = ids.filter(o => o.type === 'trace').length;
+    const fc = ids.filter(o => o.type === 'flywire').length;
+    let desc = []; if (cc) desc.push(`${cc}器件`); if (tc) desc.push(`${tc}走线`); if (fc) desc.push(`${fc}飞线`);
+    document.getElementById('status-hint').textContent = `已框选 ${desc.join('+')} | G编组 Ctrl+R旋转`;
   }
   this._selectRect = null;
   this._updateCompList();
@@ -259,12 +281,26 @@ App.prototype._groupSelected = function() {
   const ids = this._getSelectionIds();
   if (ids.length < 2) { document.getElementById('status-hint').textContent = '至少选2个器件才能编组'; return; }
   const group = { id: uid(), name: 'Grp' + (this.model.componentGroups.length + 1), componentIds: [...ids] };
+  const that = this;
+  const oldGroups = new Map(); // comp.id → old groupId
   for (const comp of this.model.allComponents()) {
-    if (ids.includes(comp.id)) comp.groupId = group.id;
+    if (ids.includes(comp.id)) { oldGroups.set(comp.id, comp.groupId); comp.groupId = group.id; }
   }
   this.model.componentGroups.push(group);
   this._multiSelObjects = [];
   this.selectedObject = group;
+
+  const cmd = new Command('编组', () => {
+    for (const comp of that.model.allComponents()) { if (ids.includes(comp.id)) comp.groupId = group.id; }
+    if (!that.model.componentGroups.includes(group)) that.model.componentGroups.push(group);
+    that.selectedObject = group;
+    return {group, ids, oldGroups};
+  }, (data) => {
+    for (const comp of that.model.allComponents()) { if (data.ids.includes(comp.id)) comp.groupId = data.oldGroups.get(comp.id) || null; }
+    that.model.componentGroups = that.model.componentGroups.filter(g => g.id !== data.group.id);
+    that.selectedObject = null;
+  });
+  this.cmdMgr.execute(cmd);
   this._updateCompList();
   this._autoSave();
   document.getElementById('status-hint').textContent = `已编组: ${group.name}`;
@@ -273,13 +309,27 @@ App.prototype._groupSelected = function() {
 // 拆组
 App.prototype._ungroupSelected = function() {
   const sel = this.selectedObject;
+  const that = this;
   if (sel && sel.componentIds) {
+    const oldGroup = JSON.parse(JSON.stringify(sel));
+    const oldComps = new Map();
     for (const comp of this.model.allComponents()) {
-      if (comp.groupId === sel.id) comp.groupId = null;
+      if (comp.groupId === sel.id) { oldComps.set(comp.id, comp.groupId); comp.groupId = null; }
     }
     this.model.componentGroups = this.model.componentGroups.filter(g => g.id !== sel.id);
     this.selectedObject = null;
-    this._dragGroupStart = null; // 清除残留编组拖拽数据
+    this._dragGroupStart = null;
+
+    const cmd = new Command('拆组', () => {
+      for (const comp of that.model.allComponents()) { if (oldComps.has(comp.id)) comp.groupId = null; }
+      that.model.componentGroups = that.model.componentGroups.filter(g => g.id !== oldGroup.id);
+      that.selectedObject = null;
+      return {oldGroup, oldComps};
+    }, (data) => {
+      for (const comp of that.model.allComponents()) { if (data.oldComps.has(comp.id)) comp.groupId = data.oldComps.get(comp.id); }
+      that.model.componentGroups.push(data.oldGroup);
+    });
+    this.cmdMgr.execute(cmd);
     this._updateCompList();
     this._autoSave();
     document.getElementById('status-hint').textContent = '已拆组';

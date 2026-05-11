@@ -62,6 +62,33 @@ App.prototype._onMouseDown = function(e) {
     return;
   }
 
+  // 多选状态下，点击已选对象时准备多选拖拽（而非段拖拽/单选）
+  if (this._multiSelObjects.length > 0) {
+    const hit = this.hitTester.hitAnythingAt(pos.x, pos.y);
+    const inSel = hit && this._multiSelObjects.some(o => o.type === hit.type && o.id === hit.id);
+    if (inSel) {
+      // 构建组件拖拽组（如有组件）
+      const compIds = this._getMultiSelCompIds();
+      if (compIds.length > 0) {
+        this._dragGroupStart = [];
+        for (const cid of compIds) {
+          const c = this.model.findById(cid);
+          if (!c) continue;
+          if (c.type === 'smd') this._dragGroupStart.push({comp:c, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
+          else this._dragGroupStart.push({comp:c, gx:c.gx, gy:c.gy});
+        }
+        const rf = this.hitTester.screenToGridFloat(pos.x, pos.y);
+        this.dragMouseStart = {gx: rf.gx, gy: rf.gy};
+      }
+      this.selectedObject = null;
+      this._updatePropPanel();
+      this._updateCompList();
+      return;
+    }
+    // 点击了不在多选中的对象 → 清空多选，走正常单选流程
+    this._multiSelObjects = [];
+  }
+
   // 检查是否点击了焊锡段
   const seg = this.hitTester.solderSegmentAt(pos.x, pos.y);
   if (seg) {
@@ -310,11 +337,18 @@ App.prototype._onDoubleClick = function(e) {
     const newLabel = prompt(`引脚 (${dx+1},${dy+1}) 标签:`, curLabel);
     if (newLabel !== null) {
       if (!comp.pinLabels) comp.pinLabels = {};
-      if (newLabel.trim()) {
-        comp.pinLabels[key] = newLabel.trim();
-      } else {
-        delete comp.pinLabels[key];
-      }
+      const old = curLabel;
+      const val = newLabel.trim() ? newLabel.trim() : null;
+      const that = this;
+      const cmd = new Command('引脚标签', () => {
+        if (val) { if (!comp.pinLabels) comp.pinLabels = {}; comp.pinLabels[key] = val; }
+        else { delete comp.pinLabels[key]; }
+        return {comp, key, val, old};
+      }, (data) => {
+        if (data.old) data.comp.pinLabels[data.key] = data.old;
+        else delete data.comp.pinLabels[data.key];
+      });
+      this.cmdMgr.execute(cmd);
       this._autoSave();
     }
     return;
@@ -328,7 +362,16 @@ App.prototype._onDoubleClick = function(e) {
     this._updateCompList();
     const newName = prompt('器件名称:', comp.name);
     if (newName !== null && newName.trim()) {
-      comp.name = newName.trim();
+      const oldName = comp.name;
+      const name = newName.trim();
+      const that = this;
+      const cmd = new Command('改名', () => {
+        comp.name = name;
+        return {comp, name, oldName};
+      }, (data) => {
+        data.comp.name = data.oldName;
+      });
+      this.cmdMgr.execute(cmd);
       this._updatePropPanel();
       this._updateCompList();
       this._autoSave();
@@ -368,7 +411,7 @@ App.prototype._onKeyDown = function(e) {
   const ctrl = e.ctrlKey || e.metaKey;
 
   if (ctrl && e.key === 'z') { e.preventDefault(); this.undo(); return; }
-  if (ctrl && (e.key === 'y' || (e.key === 'Z' && e.shiftKey))) { e.preventDefault(); this.redo(); return; }
+  if (ctrl && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); this.redo(); return; }
   if (ctrl && e.key === 'c') { e.preventDefault(); this.copy(); return; }
   if (ctrl && e.key === 'v') { e.preventDefault(); this.paste(); return; }
   if (ctrl && e.key === 'x') { e.preventDefault(); this.cut(); return; }
@@ -382,12 +425,12 @@ App.prototype._onKeyDown = function(e) {
   if (e.key === 'g' || e.key === 'G') { e.preventDefault(); this._groupSelected(); return; }
   if (e.key === 'u' || e.key === 'U') { e.preventDefault(); this._ungroupSelected(); return; }
 
-  if (e.key === '1') { this.setMode('select'); return; }
-  if (e.key === '2') { this.setMode('smd'); return; }
-  if (e.key === '3') { this.setMode('header'); return; }
-  if (e.key === '4') { this.setMode('flywire'); return; }
-  if (e.key === '5') { this.setMode('solder'); return; }
-  if (e.key === '6') { this.setMode('eraser'); return; }
+  if (e.key === '1') { e.preventDefault(); this.setMode('select'); return; }
+  if (e.key === '2') { e.preventDefault(); this.setMode('smd'); return; }
+  if (e.key === '3') { e.preventDefault(); this.setMode('header'); return; }
+  if (e.key === '4') { e.preventDefault(); this.setMode('flywire'); return; }
+  if (e.key === '5') { e.preventDefault(); this.setMode('solder'); return; }
+  if (e.key === '6') { e.preventDefault(); this.setMode('eraser'); return; }
 
   // 焊锡模式下 Enter 完成当前走线
   if (e.key === 'Enter' && this.mode === 'solder' && this.routingState) {

@@ -141,72 +141,65 @@ App.prototype._updateWorkspaceUI = function() {
 
   list.innerHTML = html;
 
-  // 点击切换文件
-  list.querySelectorAll('[data-ws]').forEach(el => {
-    el.addEventListener('click', (e) => {
-      if (e.target.dataset.del) return;
-      const name = el.dataset.ws;
-      if (name === this._currentFile) return;
-      // 切换前：如果当前文件有修改，提示保存
-      if (this._isDirty) {
-        if (confirm(`"${this._currentFile}" 有未保存的修改，是否保存后切换？`)) {
-          this._save();
+  // 事件委托：只在首次挂载，避免监听器累积
+  if (!list._wsDelegateInstalled) {
+    list._wsDelegateInstalled = true;
+    const app = this;
+    list.addEventListener('click', function(e) {
+      // 删除按钮
+      const delEl = e.target.closest('[data-del]');
+      if (delEl) {
+        e.stopPropagation();
+        const name = delEl.dataset.del;
+        const wasCurrent = name === app._currentFile;
+        app._workspaceFiles = app._workspaceFiles.filter(x => x.name !== name);
+        app._saveWorkspace();
+        if (wasCurrent) {
+          if (app._workspaceFiles.length > 0) {
+            const next = app._workspaceFiles[0];
+            app._switchToFile(next.name);
+            document.getElementById('status-hint').textContent = `已移除并切换到: ${next.name}`;
+          } else {
+            app.model = new DataModel();
+            app.cmdMgr.clear();
+            app.selectedObject = null;
+            app._smdCounter = 0; app._headerCounter = 0;
+            app._currentFile = '未命名';
+            app._isDirty = false;
+            app._needsRender = true;
+            app._updateCompList();
+            app._updatePropPanel();
+            document.getElementById('status-hint').textContent = '工作区已清空';
+          }
+          return;
         }
-      }
-      this._switchToFile(name);
-      document.getElementById('status-hint').textContent = `已切换: ${name}`;
-    });
-  });
-
-  // 删除按钮
-  list.querySelectorAll('[data-del]').forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const name = el.dataset.del;
-      const wasCurrent = name === this._currentFile;
-      this._workspaceFiles = this._workspaceFiles.filter(x => x.name !== name);
-      this._saveWorkspace();
-      // 如果删除的是当前文件，自动切换到相邻文件
-      if (wasCurrent) {
-        if (this._workspaceFiles.length > 0) {
-          // 优先切换到相邻的前一个
-          const idx = Math.min(this._workspaceFiles.length - 1, 0);
-          const next = this._workspaceFiles[Math.max(0, idx)];
-          this._switchToFile(next.name);
-          document.getElementById('status-hint').textContent = `已移除并切换到: ${next.name}`;
-        } else {
-          // 无文件了，清空画布
-          this.model = new DataModel();
-          this.cmdMgr.clear();
-          this.selectedObject = null;
-          this._smdCounter = 0; this._headerCounter = 0;
-          this._currentFile = '未命名';
-          this._isDirty = false;
-          this._needsRender = true;
-          this._updateCompList();
-          this._updatePropPanel();
-          document.getElementById('status-hint').textContent = '工作区已清空';
-        }
+        app._updateWorkspaceUI();
+        document.getElementById('status-hint').textContent = `已从工作区移除: ${name}`;
         return;
       }
-      this._updateWorkspaceUI();
-      document.getElementById('status-hint').textContent = `已从工作区移除: ${name}`;
+      // 切换文件
+      const wsEl = e.target.closest('[data-ws]');
+      if (wsEl) {
+        const name = wsEl.dataset.ws;
+        if (name === app._currentFile) return;
+        if (app._isDirty) {
+          if (confirm(`"${app._currentFile}" 有未保存的修改，是否保存后切换？`)) {
+            app._save();
+          }
+        }
+        app._switchToFile(name);
+        document.getElementById('status-hint').textContent = `已切换: ${name}`;
+      }
     });
-  });
+  }
 };
 
 // 切换到指定文件（内部辅助）
 App.prototype._switchToFile = function(name) {
   const f = this._workspaceFiles.find(x => x.name === name);
   if (!f) return;
-  // 先更新当前文件的工作区数据（脏数据不丢失）
-  if (this._isDirty && this._currentFile && this._currentFile !== '未命名') {
-    const exist = this._workspaceFiles.findIndex(x => x.name === this._currentFile);
-    if (exist >= 0) {
-      this._workspaceFiles[exist].data = this.model.toJSON();
-    }
-  }
-  this._autoSave(); // 先保存当前
+  // 清除当前 session（不保留未保存的脏数据到下一个文件）
+  try { localStorage.removeItem('perfboard_session'); } catch(e) {}
   this.model = new DataModel();
   this.model.fromJSON(f.data);
   this.cmdMgr.clear();

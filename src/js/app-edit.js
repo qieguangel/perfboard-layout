@@ -214,12 +214,12 @@ App.prototype._rotateHeader = function(comp) {
   const that = this;
 
   const cmd = new Command('旋转器件', () => {
-    const cx = comp.gx + Math.floor(comp.w/2);
-    const cy = comp.gy + Math.floor(comp.h/2);
+    const cx = comp.gx + (comp.w - 1) / 2;
+    const cy = comp.gy + (comp.h - 1) / 2;
     comp.w = oldH;
     comp.h = oldW;
-    comp.gx = cx - Math.floor(comp.w/2);
-    comp.gy = cy - Math.floor(comp.h/2);
+    comp.gx = Math.round(cx - (comp.w - 1) / 2);
+    comp.gy = Math.round(cy - (comp.h - 1) / 2);
     // 变换引脚标签：旧(dx,dy) → 新(h-1-dy, dx)
     const newLabels = {};
     for (const [key, label] of Object.entries(oldLabels)) {
