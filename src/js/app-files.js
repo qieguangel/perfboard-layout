@@ -98,6 +98,7 @@ App.prototype._saveWorkspace = function() {
     localStorage.setItem('perfboard_workspace', JSON.stringify(
       this._workspaceFiles.map(f => ({name: f.name, data: f.data}))
     ));
+    localStorage.setItem('perfboard_active_file', this._currentFile);
   } catch(e) {}
 };
 
@@ -219,6 +220,7 @@ App.prototype._switchToFile = function(name) {
   this._currentFile = name;
   this._isDirty = false;
   this._needsRender = true;
+  try { localStorage.setItem('perfboard_active_file', name); } catch(e) {}
   this._updateWorkspaceUI();
   this._updateCompList();
   this._updatePropPanel();
@@ -303,6 +305,28 @@ App.prototype._loadFromStorage = function() {
   // 初始居中
   this.offsetX = this.canvas.parentElement.clientWidth / 2;
   this.offsetY = this.canvas.parentElement.clientHeight / 2;
+
+  // 无残留会话时，自动加载上次活动文件
+  if (!hasSession && this._workspaceFiles.length > 0) {
+    let activeName = null;
+    try { activeName = localStorage.getItem('perfboard_active_file'); } catch(e) {}
+    const f = this._workspaceFiles.find(x => x.name === activeName) || this._workspaceFiles[0];
+    if (f && f.data) {
+      this.model = new DataModel();
+      this.model.fromJSON(f.data);
+      this._currentFile = f.name;
+      for (const c of this.model.smdComponents) {
+        const m = c.name.match(/^R(\d+)$/);
+        if (m) this._smdCounter = Math.max(this._smdCounter, parseInt(m[1]) + 1);
+      }
+      for (const c of this.model.headerComponents) {
+        const m = c.name.match(/^J(\d+)$/);
+        if (m) this._headerCounter = Math.max(this._headerCounter, parseInt(m[1]) + 1);
+      }
+      this._needsRender = true;
+      this._updateCompList();
+    }
+  }
 
   // 如果有上次会话，显示恢复提示
   if (hasSession) {

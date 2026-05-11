@@ -114,6 +114,9 @@ App.prototype._onMouseDown = function(e) {
   const fw = this.hitTester.flyWireAt(pos.x, pos.y);
   if (fw) {
     this.selectedObject = fw;
+    this.dragCompStart = {from: {gx: fw.from.gx, gy: fw.from.gy}, to: {gx: fw.to.gx, gy: fw.to.gy}};
+    const rf = this.hitTester.screenToGridFloat(pos.x, pos.y);
+    this.dragMouseStart = {gx: rf.gx, gy: rf.gy};
     this._updatePropPanel();
     this._updateCompList();
     return;

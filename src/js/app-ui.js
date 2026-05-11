@@ -31,13 +31,15 @@ App.prototype._updatePropPanel = function() {
   const sel = this.selectedObject;
   // 处理 group
   if (sel && sel.componentIds) {
-    // 确保每次选中组都初始化拖拽数据
-    this._dragGroupStart = [];
-    for (const cid of sel.componentIds) {
-      const c = this.model.findById(cid);
-      if (!c) continue;
-      if (c.type === 'smd') this._dragGroupStart.push({comp:c, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
-      else this._dragGroupStart.push({comp:c, gx:c.gx, gy:c.gy});
+    // 确保选中组时初始化拖拽数据（拖拽中不重建，否则位置逐帧叠加飞走）
+    if (!this.isDragging) {
+      this._dragGroupStart = [];
+      for (const cid of sel.componentIds) {
+        const c = this.model.findById(cid);
+        if (!c) continue;
+        if (c.type === 'smd') this._dragGroupStart.push({comp:c, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
+        else this._dragGroupStart.push({comp:c, gx:c.gx, gy:c.gy});
+      }
     }
     panel.style.display = 'block';
     document.getElementById('prop-name').value = sel.name || '';

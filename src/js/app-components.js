@@ -29,13 +29,17 @@ App.prototype._moveComponentToCursor = function(pos) {
       }
     }
   } else if (this.selectedObject && this.dragCompStart) {
-    const comp = this.selectedObject;
+    const obj = this.selectedObject;
     const start = this.dragCompStart;
-    if (comp.type === 'smd') {
-      comp.gx1 = start.gx1 + dgx; comp.gy1 = start.gy1 + dgy;
-      comp.gx2 = start.gx2 + dgx; comp.gy2 = start.gy2 + dgy;
-    } else if (comp.type === 'header') {
-      comp.gx = start.gx + dgx; comp.gy = start.gy + dgy;
+    if (obj.type === 'smd') {
+      obj.gx1 = start.gx1 + dgx; obj.gy1 = start.gy1 + dgy;
+      obj.gx2 = start.gx2 + dgx; obj.gy2 = start.gy2 + dgy;
+    } else if (obj.type === 'header') {
+      obj.gx = start.gx + dgx; obj.gy = start.gy + dgy;
+    } else if (start.from !== undefined) {
+      // 飞线
+      obj.from.gx = start.from.gx + dgx; obj.from.gy = start.from.gy + dgy;
+      obj.to.gx = start.to.gx + dgx; obj.to.gy = start.to.gy + dgy;
     }
   }
 
@@ -110,35 +114,48 @@ App.prototype._finishComponentMove = function() {
     return;
   }
   if (!this.selectedObject || !this.dragCompStart) return;
-  const comp = this.selectedObject;
-  const newState = comp.type === 'smd'
-    ? {gx1: comp.gx1, gy1: comp.gy1, gx2: comp.gx2, gy2: comp.gy2}
-    : {gx: comp.gx, gy: comp.gy};
+  const obj = this.selectedObject;
   const oldState = this.dragCompStart;
   const that = this;
+  let newState, label;
 
-  // 先恢复到原始状态，让execute重新设置
-  if (comp.type === 'smd') {
-    comp.gx1 = oldState.gx1; comp.gy1 = oldState.gy1;
-    comp.gx2 = oldState.gx2; comp.gy2 = oldState.gy2;
+  if (obj.type === 'smd') {
+    newState = {gx1: obj.gx1, gy1: obj.gy1, gx2: obj.gx2, gy2: obj.gy2};
+    obj.gx1 = oldState.gx1; obj.gy1 = oldState.gy1;
+    obj.gx2 = oldState.gx2; obj.gy2 = oldState.gy2;
+    label = '移动器件';
+  } else if (obj.type === 'header') {
+    newState = {gx: obj.gx, gy: obj.gy};
+    obj.gx = oldState.gx; obj.gy = oldState.gy;
+    label = '移动器件';
   } else {
-    comp.gx = oldState.gx; comp.gy = oldState.gy;
+    // 飞线
+    newState = {from: {gx: obj.from.gx, gy: obj.from.gy}, to: {gx: obj.to.gx, gy: obj.to.gy}};
+    obj.from.gx = oldState.from.gx; obj.from.gy = oldState.from.gy;
+    obj.to.gx = oldState.to.gx; obj.to.gy = oldState.to.gy;
+    label = '移动飞线';
   }
 
-  const cmd = new Command('移动器件', () => {
-    if (comp.type === 'smd') {
-      comp.gx1 = newState.gx1; comp.gy1 = newState.gy1;
-      comp.gx2 = newState.gx2; comp.gy2 = newState.gy2;
+  const cmd = new Command(label, () => {
+    if (obj.type === 'smd') {
+      obj.gx1 = newState.gx1; obj.gy1 = newState.gy1;
+      obj.gx2 = newState.gx2; obj.gy2 = newState.gy2;
+    } else if (obj.type === 'header') {
+      obj.gx = newState.gx; obj.gy = newState.gy;
     } else {
-      comp.gx = newState.gx; comp.gy = newState.gy;
+      obj.from.gx = newState.from.gx; obj.from.gy = newState.from.gy;
+      obj.to.gx = newState.to.gx; obj.to.gy = newState.to.gy;
     }
-    return {comp, oldState};
+    return {obj, oldState};
   }, (data) => {
-    if (data.comp.type === 'smd') {
-      data.comp.gx1 = data.oldState.gx1; data.comp.gy1 = data.oldState.gy1;
-      data.comp.gx2 = data.oldState.gx2; data.comp.gy2 = data.oldState.gy2;
+    if (data.obj.type === 'smd') {
+      data.obj.gx1 = data.oldState.gx1; data.obj.gy1 = data.oldState.gy1;
+      data.obj.gx2 = data.oldState.gx2; data.obj.gy2 = data.oldState.gy2;
+    } else if (data.obj.type === 'header') {
+      data.obj.gx = data.oldState.gx; data.obj.gy = data.oldState.gy;
     } else {
-      data.comp.gx = data.oldState.gx; data.comp.gy = data.oldState.gy;
+      data.obj.from.gx = data.oldState.from.gx; data.obj.from.gy = data.oldState.from.gy;
+      data.obj.to.gx = data.oldState.to.gx; data.obj.to.gy = data.oldState.to.gy;
     }
   });
 
