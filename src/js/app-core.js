@@ -41,7 +41,7 @@ class App {
     this.headerPreview = null;
     // 矩形框选
     this._selectRect = null;     // {sx1,sy1,sx2,sy2} 屏幕坐标
-    this._multiSelection = [];   // 框选的多个组件id列表
+    this._multiSelObjects = [];  // 多选列表 [{type:'smd'|'header'|'trace'|'flywire', id}]
     this._dragGroupStart = null; // 编组拖拽起始状态
     this._needsRender = true;    // 脏渲染标记
     this._lastMX = -1; this._lastMY = -1;

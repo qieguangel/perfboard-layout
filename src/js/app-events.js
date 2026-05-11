@@ -44,6 +44,24 @@ App.prototype._onMouseDown = function(e) {
   }
 
   // 选择模式
+  // Ctrl+点击多选切换
+  if ((e.ctrlKey || e.metaKey) && this.mode === 'select') {
+    const hit = this.hitTester.hitAnythingAt(pos.x, pos.y);
+    if (hit) {
+      this._toggleMultiSelect(hit);
+      this.mouseDown = false; // 防止后续拖拽
+      this._updatePropPanel();
+      this._updateCompList();
+    } else {
+      // Ctrl+点击空白：清空多选
+      this._multiSelObjects = [];
+      this.selectedObject = null;
+      this._updatePropPanel();
+      this._updateCompList();
+    }
+    return;
+  }
+
   // 检查是否点击了焊锡段
   const seg = this.hitTester.solderSegmentAt(pos.x, pos.y);
   if (seg) {
@@ -103,7 +121,7 @@ App.prototype._onMouseDown = function(e) {
 
   // 选择模式空白处：开始矩形框选（短按拖动即可，移除格点路由避免冲突）
   this.selectedObject = null;
-  this._multiSelection = [];
+  this._multiSelObjects = [];
   this._selectRect = {sx1: pos.x, sy1: pos.y, sx2: pos.x, sy2: pos.y};
   this._updatePropPanel();
   this._updateCompList();
@@ -178,9 +196,10 @@ App.prototype._onMouseMove = function(e) {
     // 器件/编组/框选移动
     if ((this.dragCompStart || this._dragGroupStart) && this.selectedObject && elapsed >= LONG_PRESS_MS) {
       // 框选状态下自动转为临时_dragGroupStart
-      if (!this._dragGroupStart && this._multiSelection.length >= 2) {
+      const compIds = this._getMultiSelCompIds();
+      if (!this._dragGroupStart && compIds.length >= 2) {
         this._dragGroupStart = [];
-        for (const cid of this._multiSelection) {
+        for (const cid of compIds) {
           const c = this.model.findById(cid);
           if (!c) continue;
           if (c.type === 'smd') this._dragGroupStart.push({comp:c, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
@@ -382,6 +401,25 @@ App.prototype._onKeyDown = function(e) {
       this.routingState = null;
       this.routingFromEndpoint = null;
       document.getElementById('status-hint').textContent = '焊锡走线已取消';
+    }
+  }
+
+  // Ctrl+点击多选切换
+  _toggleMultiSelect(hit) {
+    const idx = this._multiSelObjects.findIndex(
+      o => o.type === hit.type && o.id === hit.id
+    );
+    if (idx >= 0) {
+      // 已选中 → 移除
+      this._multiSelObjects.splice(idx, 1);
+    } else {
+      // 未选中 → 添加
+      this._multiSelObjects.push({type: hit.type, id: hit.id});
+    }
+    if (this._multiSelObjects.length === 0) {
+      this.selectedObject = null;
+    } else {
+      this.selectedObject = null; // 多选活跃时无单选
     }
   }
 };

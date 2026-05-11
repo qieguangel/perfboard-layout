@@ -114,13 +114,25 @@ App.prototype.deleteSelected = function() {
 };
 
 App.prototype.rotateComponent = function() {
-  const ids = this._getSelectionIds();
-  if (ids.length >= 2) { this._rotateMulti(ids); return; }
-  const sel = this.selectedObject;
-  if (!sel) return;
-  if (sel.type === 'smd') { this._rotateSMD(sel); }
-  else if (sel.type === 'header') { this._rotateHeader(sel); }
-  else if (sel.componentIds) { this._rotateMulti(sel.componentIds); }
+  const allObjs = this._getAllSelectedObjects();
+  if (allObjs.length === 0) return;
+
+  const bounds = this._computeSelectionBounds(allObjs);
+  if (!bounds) return;
+  const {cx, cy} = bounds;
+
+  const snapshots = this._snapshotAllObjects(allObjs);
+  const that = this;
+
+  const cmd = new Command(allObjs.length >= 2 ? '旋转多选' : '旋转', () => {
+    that._rotateAllObjects(allObjs, cx, cy);
+    return {snapshots: that._snapshotAllObjects(allObjs)};
+  }, (data) => {
+    that._restoreAllObjects(data.snapshots);
+  });
+
+  this.cmdMgr.execute(cmd);
+  this._autoSave();
 };
 
 App.prototype._rotateMulti = function(ids) {
@@ -226,63 +238,29 @@ App.prototype._rotateHeader = function(comp) {
   this._autoSave();
 };
 
-App.prototype.flipHorizontal = function() {
-  const ids = this._getSelectionIds();
-  if (ids.length >= 2) { this._flipMulti(ids, 'h'); return; }
-  const sel = this.selectedObject;
-  if (!sel) return;
+App.prototype.flipHorizontal = function() { this._flipGeneric('h'); };
+App.prototype.flipVertical = function() { this._flipGeneric('v'); };
 
-  if (sel.componentIds) { this._flipMulti(sel.componentIds, 'h'); return; }
-  if (sel.type === 'smd') {
-    document.getElementById('status-hint').textContent = '贴片器件请用Ctrl+R旋转，无需翻转';
-    return;
-  }
-  if (sel.type === 'header') {
-    const old = {gx: sel.gx, gy: sel.gy, w: sel.w, h: sel.h, pinLabels: sel.pinLabels ? JSON.parse(JSON.stringify(sel.pinLabels)) : {}};
-    const cmd = new Command('水平翻转', () => {
-      const newLabels = {};
-      for (const [key, label] of Object.entries(old.pinLabels)) {
-        const [dx, dy] = key.split(',').map(Number);
-        newLabels[`${sel.w - 1 - dx},${dy}`] = label;
-      }
-      sel.pinLabels = newLabels;
-      return {comp: sel, old};
-    }, (data) => {
-      data.comp.pinLabels = data.old.pinLabels;
-    });
-    this.cmdMgr.execute(cmd);
-    document.getElementById('status-hint').textContent = '已水平翻转（标签已更新）';
-  }
-  this._autoSave();
-};
+App.prototype._flipGeneric = function(dir) {
+  const allObjs = this._getAllSelectedObjects();
+  if (allObjs.length === 0) return;
 
-App.prototype.flipVertical = function() {
-  const ids = this._getSelectionIds();
-  if (ids.length >= 2) { this._flipMulti(ids, 'v'); return; }
-  const sel = this.selectedObject;
-  if (!sel) return;
+  const bounds = this._computeSelectionBounds(allObjs);
+  if (!bounds) return;
+  const {cx, cy} = bounds;
 
-  if (sel.componentIds) { this._flipMulti(sel.componentIds, 'v'); return; }
-  if (sel.type === 'smd') {
-    document.getElementById('status-hint').textContent = '贴片器件请用Ctrl+R旋转，无需翻转';
-    return;
-  }
-  if (sel.type === 'header') {
-    const old = {gx: sel.gx, gy: sel.gy, w: sel.w, h: sel.h, pinLabels: sel.pinLabels ? JSON.parse(JSON.stringify(sel.pinLabels)) : {}};
-    const cmd = new Command('垂直翻转', () => {
-      const newLabels = {};
-      for (const [key, label] of Object.entries(old.pinLabels)) {
-        const [dx, dy] = key.split(',').map(Number);
-        newLabels[`${dx},${sel.h - 1 - dy}`] = label;
-      }
-      sel.pinLabels = newLabels;
-      return {comp: sel, old};
-    }, (data) => {
-      data.comp.pinLabels = data.old.pinLabels;
-    });
-    this.cmdMgr.execute(cmd);
-    document.getElementById('status-hint').textContent = '已垂直翻转（标签已更新）';
-  }
+  const snapshots = this._snapshotAllObjects(allObjs);
+  const that = this;
+  const label = dir === 'h' ? (allObjs.length>=2?'水平翻转多选':'水平翻转') : (allObjs.length>=2?'垂直翻转多选':'垂直翻转');
+
+  const cmd = new Command(label, () => {
+    that._flipAllObjects(allObjs, cx, cy, dir);
+    return {snapshots: that._snapshotAllObjects(allObjs)};
+  }, (data) => {
+    that._restoreAllObjects(data.snapshots);
+  });
+  this.cmdMgr.execute(cmd);
+  document.getElementById('status-hint').textContent = `已${dir==='h'?'水平':'垂直'}翻转`;
   this._autoSave();
 };
 
@@ -336,6 +314,136 @@ App.prototype._flipMulti = function(ids, dir) {
   });
   this.cmdMgr.execute(cmd);
   this._autoSave();
+};
+
+// ==================== 混合类型变换辅助方法 ====================
+App.prototype._computeSelectionBounds = function(allObjs) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let count = 0;
+  for (const obj of allObjs) {
+    if (obj.type === 'smd' || obj.type === 'header') {
+      const c = this.model.findById(obj.id); if (!c) continue;
+      if (c.type === 'smd') {
+        minX = Math.min(minX, c.gx1, c.gx2); minY = Math.min(minY, c.gy1, c.gy2);
+        maxX = Math.max(maxX, c.gx1, c.gx2); maxY = Math.max(maxY, c.gy1, c.gy2);
+      } else {
+        minX = Math.min(minX, c.gx); minY = Math.min(minY, c.gy);
+        maxX = Math.max(maxX, c.gx + c.w - 1); maxY = Math.max(maxY, c.gy + c.h - 1);
+      }
+      count++;
+    } else if (obj.type === 'trace') {
+      const t = this.model.solderTraces.find(tr => tr.id === obj.id); if (!t) continue;
+      for (const pt of t.points) {
+        minX = Math.min(minX, pt.gx); minY = Math.min(minY, pt.gy);
+        maxX = Math.max(maxX, pt.gx); maxY = Math.max(maxY, pt.gy);
+      }
+      count++;
+    } else if (obj.type === 'flywire') {
+      const f = this.model.flyWires.find(fw => fw.id === obj.id); if (!f) continue;
+      minX = Math.min(minX, f.from.gx, f.to.gx); minY = Math.min(minY, f.from.gy, f.to.gy);
+      maxX = Math.max(maxX, f.from.gx, f.to.gx); maxY = Math.max(maxY, f.from.gy, f.to.gy);
+      count++;
+    }
+  }
+  return count > 0 ? {cx: (minX + maxX) / 2, cy: (minY + maxY) / 2} : null;
+};
+
+App.prototype._snapshotAllObjects = function(allObjs) {
+  const snaps = [];
+  for (const obj of allObjs) {
+    if (obj.type === 'smd') {
+      const c = this.model.findById(obj.id); if (!c) continue;
+      snaps.push({type:'smd', id:c.id, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
+    } else if (obj.type === 'header') {
+      const c = this.model.findById(obj.id); if (!c) continue;
+      snaps.push({type:'header', id:c.id, gx:c.gx, gy:c.gy, w:c.w, h:c.h,
+        pinLabels: c.pinLabels ? JSON.parse(JSON.stringify(c.pinLabels)) : {}});
+    } else if (obj.type === 'trace') {
+      const t = this.model.solderTraces.find(tr => tr.id === obj.id); if (!t) continue;
+      snaps.push({type:'trace', id:t.id, points: t.points.map(p=>({gx:p.gx, gy:p.gy}))});
+    } else if (obj.type === 'flywire') {
+      const f = this.model.flyWires.find(fw => fw.id === obj.id); if (!f) continue;
+      snaps.push({type:'flywire', id:f.id, from:{gx:f.from.gx, gy:f.from.gy}, to:{gx:f.to.gx, gy:f.to.gy}});
+    }
+  }
+  return snaps;
+};
+
+App.prototype._restoreAllObjects = function(snaps) {
+  for (const s of snaps) {
+    if (s.type === 'smd') {
+      const c = this.model.findById(s.id); if (c) { c.gx1=s.gx1; c.gy1=s.gy1; c.gx2=s.gx2; c.gy2=s.gy2; }
+    } else if (s.type === 'header') {
+      const c = this.model.findById(s.id); if (c) {
+        c.gx=s.gx; c.gy=s.gy; c.w=s.w; c.h=s.h;
+        if (s.pinLabels && Object.keys(s.pinLabels).length > 0) { c.pinLabels = JSON.parse(JSON.stringify(s.pinLabels)); } else { c.pinLabels = {}; }
+      }
+    } else if (s.type === 'trace') {
+      const t = this.model.solderTraces.find(tr => tr.id === s.id); if (t) t.points = s.points.map(p=>({gx:p.gx, gy:p.gy}));
+    } else if (s.type === 'flywire') {
+      const f = this.model.flyWires.find(fw => fw.id === s.id); if (f) { f.from.gx=s.from.gx; f.from.gy=s.from.gy; f.to.gx=s.to.gx; f.to.gy=s.to.gy; }
+    }
+  }
+};
+
+App.prototype._rotateAllObjects = function(allObjs, cx, cy) {
+  for (const obj of allObjs) {
+    if (obj.type === 'smd') {
+      const c = this.model.findById(obj.id); if (!c) continue;
+      const dx1=c.gx1-cx, dy1=c.gy1-cy, dx2=c.gx2-cx, dy2=c.gy2-cy;
+      c.gx1=Math.round(cx-dy1); c.gy1=Math.round(cy+dx1);
+      c.gx2=Math.round(cx-dy2); c.gy2=Math.round(cy+dx2);
+    } else if (obj.type === 'header') {
+      const c = this.model.findById(obj.id); if (!c) continue;
+      const oldW=c.w, oldH=c.h;
+      const hcx=c.gx+(oldW-1)/2, hcy=c.gy+(oldH-1)/2;
+      const dx=hcx-cx, dy=hcy-cy;
+      const nx=cx-dy, ny=cy+dx;
+      c.w=oldH; c.h=oldW;
+      c.gx=Math.round(nx-(c.w-1)/2); c.gy=Math.round(ny-(c.h-1)/2);
+      if (c.pinLabels) {
+        const nl={}; for (const [k,v] of Object.entries(c.pinLabels)) {
+          const [dx0,dy0]=k.split(',').map(Number); nl[`${oldH-1-dy0},${dx0}`]=v;
+        } c.pinLabels=nl;
+      }
+    } else if (obj.type === 'trace') {
+      const t = this.model.solderTraces.find(tr => tr.id === obj.id); if (!t) continue;
+      for (const pt of t.points) { const dx=pt.gx-cx, dy=pt.gy-cy; pt.gx=Math.round(cx-dy); pt.gy=Math.round(cy+dx); }
+    } else if (obj.type === 'flywire') {
+      const f = this.model.flyWires.find(fw => fw.id === obj.id); if (!f) continue;
+      const dx1=f.from.gx-cx, dy1=f.from.gy-cy, dx2=f.to.gx-cx, dy2=f.to.gy-cy;
+      f.from.gx=Math.round(cx-dy1); f.from.gy=Math.round(cy+dx1);
+      f.to.gx=Math.round(cx-dy2); f.to.gy=Math.round(cy+dx2);
+    }
+  }
+};
+
+App.prototype._flipAllObjects = function(allObjs, cx, cy, dir) {
+  for (const obj of allObjs) {
+    if (obj.type === 'smd') {
+      const c = this.model.findById(obj.id); if (!c) continue;
+      if (dir==='h') { c.gx1=Math.round(2*cx-c.gx1); c.gx2=Math.round(2*cx-c.gx2); }
+      else { c.gy1=Math.round(2*cy-c.gy1); c.gy2=Math.round(2*cy-c.gy2); }
+    } else if (obj.type === 'header') {
+      const c = this.model.findById(obj.id); if (!c) continue;
+      if (dir==='h') {
+        c.gx=Math.round(2*cx-(c.gx+c.w-1));
+        if (c.pinLabels) { const nl={}; for (const [k,v] of Object.entries(c.pinLabels)) {
+          const [dx,dy]=k.split(',').map(Number); nl[`${c.w-1-dx},${dy}`]=v; } c.pinLabels=nl; }
+      } else {
+        c.gy=Math.round(2*cy-(c.gy+c.h-1));
+        if (c.pinLabels) { const nl={}; for (const [k,v] of Object.entries(c.pinLabels)) {
+          const [dx,dy]=k.split(',').map(Number); nl[`${dx},${c.h-1-dy}`]=v; } c.pinLabels=nl; }
+      }
+    } else if (obj.type === 'trace') {
+      const t = this.model.solderTraces.find(tr => tr.id === obj.id); if (!t) continue;
+      for (const pt of t.points) { if (dir==='h') pt.gx=Math.round(2*cx-pt.gx); else pt.gy=Math.round(2*cy-pt.gy); }
+    } else if (obj.type === 'flywire') {
+      const f = this.model.flyWires.find(fw => fw.id === obj.id); if (!f) continue;
+      if (dir==='h') { f.from.gx=Math.round(2*cx-f.from.gx); f.to.gx=Math.round(2*cx-f.to.gx); }
+      else { f.from.gy=Math.round(2*cy-f.from.gy); f.to.gy=Math.round(2*cy-f.to.gy); }
+    }
+  }
 };
 
 App.prototype._afterEdit = function() {

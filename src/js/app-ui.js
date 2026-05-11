@@ -60,11 +60,18 @@ App.prototype._updatePropPanel = function() {
     return;
   }
   // 处理多选
-  if (this._multiSelection.length > 0) {
+  if (this._multiSelObjects.length > 0) {
     panel.style.display = 'block';
     document.getElementById('prop-name').value = '';
-    document.getElementById('prop-type').textContent = `多选 (${this._multiSelection.length}个)`;
-    document.getElementById('prop-pos').textContent = 'G编组 | 可拖动/旋转/翻转';
+    const compCnt = this._getMultiSelCompIds().length;
+    const traceCnt = this._multiSelObjects.filter(o => o.type === 'trace').length;
+    const fwCnt = this._multiSelObjects.filter(o => o.type === 'flywire').length;
+    let desc = [];
+    if (compCnt) desc.push(`${compCnt}器件`);
+    if (traceCnt) desc.push(`${traceCnt}走线`);
+    if (fwCnt) desc.push(`${fwCnt}飞线`);
+    document.getElementById('prop-type').textContent = `多选 (${desc.join('+')})`;
+    document.getElementById('prop-pos').textContent = 'G编组 | Ctrl+点击增减 | 可拖动/旋转/翻转';
     document.getElementById('prop-pins-row').style.display = 'none';
     document.getElementById('prop-color-row').style.display = 'none';
     return;
@@ -102,7 +109,7 @@ App.prototype._updateCompList = function() {
   const list = document.getElementById('comp-list');
   const comps = this.model.allComponents();
   let html = comps.map(c => {
-    const sel = (this.selectedObject && this.selectedObject.id === c.id) || this._multiSelection.includes(c.id) ? ' selected' : '';
+    const sel = (this.selectedObject && this.selectedObject.id === c.id) || this._multiSelObjects.some(o => o.id === c.id) ? ' selected' : '';
     const grp = c.groupId ? ' 🔗' : '';
     const typeLabel = c.type === 'smd' ? '[贴片]' : `[排针 ${c.w}×${c.h}]`;
     return `<div class="comp-item${sel}" data-id="${c.id}">${typeLabel} ${c.name}${grp}</div>`;
@@ -120,7 +127,7 @@ App.prototype._updateCompList = function() {
   list.querySelectorAll('.comp-item').forEach(el => {
     el.addEventListener('click', () => {
       const id = el.dataset.id;
-      this._multiSelection = [];
+      this._multiSelObjects = [];
       const comp = this.model.findById(id) || this.model.componentGroups.find(g => g.id === id);
       if (comp) {
         this.selectedObject = comp;

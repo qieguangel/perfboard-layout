@@ -242,10 +242,10 @@ App.prototype._finishRectSelect = function() {
       cy = p.sy + (comp.h - 1) * gs / 2;
     }
     if (cx >= x1 && cx <= x2 && cy >= y1 && cy <= y2) {
-      ids.push(comp.id);
+      ids.push({type: comp.type, id: comp.id});
     }
   }
-  this._multiSelection = ids;
+  this._multiSelObjects = ids;
   if (ids.length > 0) {
     this.selectedObject = null;
     document.getElementById('status-hint').textContent = `已框选 ${ids.length} 个器件 | G编组 G拆组`;
@@ -263,7 +263,7 @@ App.prototype._groupSelected = function() {
     if (ids.includes(comp.id)) comp.groupId = group.id;
   }
   this.model.componentGroups.push(group);
-  this._multiSelection = [];
+  this._multiSelObjects = [];
   this.selectedObject = group;
   this._updateCompList();
   this._autoSave();
@@ -283,17 +283,48 @@ App.prototype._ungroupSelected = function() {
     this._updateCompList();
     this._autoSave();
     document.getElementById('status-hint').textContent = '已拆组';
-  } else if (this._multiSelection.length >= 2) {
+  } else if (this._getMultiSelCompIds().length >= 2) {
+    const compIds = this._getMultiSelCompIds();
     for (const comp of this.model.allComponents()) {
-      if (this._multiSelection.includes(comp.id)) comp.groupId = null;
+      if (compIds.includes(comp.id)) comp.groupId = null;
     }
     document.getElementById('status-hint').textContent = '已拆组';
   }
 };
 
-// 获取当前多选id列表
+// 从多选对象中提取仅组件的ID列表（用于编组/旋转/翻转等组件专用操作）
+App.prototype._getMultiSelCompIds = function() {
+  return this._multiSelObjects
+    .filter(o => o.type === 'smd' || o.type === 'header')
+    .map(o => o.id);
+};
+
+// 获取当前选中的所有对象（统一多选/单选/编组）
+App.prototype._getAllSelectedObjects = function() {
+  if (this._multiSelObjects.length > 0) return [...this._multiSelObjects];
+  if (this.selectedObject) {
+    if (this.selectedObject.componentIds) {
+      return this.selectedObject.componentIds.map(id => {
+        const c = this.model.findById(id);
+        return c ? {type: c.type, id} : null;
+      }).filter(Boolean);
+    }
+    if (this.selectedObject.type === 'smd' || this.selectedObject.type === 'header') {
+      return [{type: this.selectedObject.type, id: this.selectedObject.id}];
+    }
+    if (this.selectedObject.trace && this.selectedObject.segIdx !== undefined) {
+      return [{type: 'trace', id: this.selectedObject.trace.id}];
+    }
+    if (this.selectedObject.from !== undefined) {
+      return [{type: 'flywire', id: this.selectedObject.id}];
+    }
+  }
+  return [];
+};
+
+// 获取当前多选id列表（组件ID，兼容旧接口）
 App.prototype._getSelectionIds = function() {
-  if (this._multiSelection.length > 0) return this._multiSelection;
+  if (this._multiSelObjects.length > 0) return this._getMultiSelCompIds();
   if (this.selectedObject) {
     if (this.selectedObject.componentIds) return this.selectedObject.componentIds;
     if (this.selectedObject.id) return [this.selectedObject.id];
@@ -376,7 +407,7 @@ App.prototype._cancelAll = function() {
   this._solderClickCount = 0;
   this._solderClickPos = null;
   this._selectRect = null;
-  this._multiSelection = [];
+  this._multiSelObjects = [];
   this.headerPreview = null;
   this.flyWireStart = null;
   this.smdStart = null;

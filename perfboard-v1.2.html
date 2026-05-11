@@ -1,0 +1,3463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>洞洞板布局工具</title>
+<style>
+:root {
+  --bg: #1a1a2e;
+  --bg2: #16213e;
+  --border: #0f3460;
+  --text: #e0e0e0;
+  --text2: #999;
+  --accent: #e94560;
+  --grid-dot: #444;
+  --btn-bg: #1a1a2e;
+  --btn-text: #ccc;
+  --panel-bg: #16213e;
+}
+:root.light {
+  --bg: #f5f5f5;
+  --bg2: #e8e8e8;
+  --border: #ccc;
+  --text: #333;
+  --text2: #666;
+  --accent: #d63031;
+  --grid-dot: #bbb;
+  --btn-bg: #e8e8e8;
+  --btn-text: #333;
+  --panel-bg: #e8e8e8;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  background: var(--bg); color: var(--text);
+  display:flex; flex-direction:column; height:100vh; overflow:hidden;
+  user-select:none; -webkit-user-select:none;
+}
+#toolbar {
+  display:flex; align-items:center; gap:6px; padding:6px 10px;
+  background:var(--bg2); border-bottom:1px solid var(--border);
+  flex-shrink:0; flex-wrap:wrap;
+}
+#toolbar button {
+  padding:5px 10px; border:1px solid var(--border); border-radius:4px;
+  background:var(--btn-bg); color:var(--btn-text); cursor:pointer; font-size:12px;
+  white-space:nowrap; transition:all 0.15s;
+}
+#toolbar button:hover { background:var(--border); color:#fff; }
+#toolbar button.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+#toolbar .sep { width:1px; height:20px; background:var(--border); margin:0 4px; }
+#toolbar .group { display:flex; gap:2px; }
+#toolbar label { font-size:11px; color:var(--text2); margin-left:4px; }
+#toolbar input[type=range] { width:80px; }
+#main-area { display:flex; flex:1; overflow:hidden; }
+#sidebar {
+  width:200px; background:var(--bg2); border-right:1px solid var(--border);
+  display:flex; flex-direction:column; flex-shrink:0; overflow-y:auto;
+}
+#sidebar h3 { padding:8px 10px; font-size:13px; color:var(--text2); border-bottom:1px solid var(--border); }
+#sidebar .comp-item {
+  padding:6px 10px; cursor:pointer; font-size:12px; border-bottom:1px solid var(--bg);
+  transition:background 0.15s;
+}
+#sidebar .comp-item:hover { background:var(--bg); }
+#sidebar .comp-item.selected { background:var(--border); color:var(--accent); }
+#canvas-wrap { flex:1; position:relative; overflow:hidden; touch-action:none; -ms-touch-action:none; }
+canvas { display:block; position:absolute; top:0; left:0; outline:none; touch-action:none; -ms-touch-action:none; }
+#statusbar {
+  height:24px; background:var(--bg2); border-top:1px solid var(--border);
+  display:flex; align-items:center; padding:0 10px; font-size:11px;
+  color:var(--text2); gap:16px; flex-shrink:0;
+}
+#statusbar span { display:inline-block; white-space:nowrap; }
+#status-mode { width:90px; }
+#status-pos { width:140px; }
+#status-zoom { width:70px; }
+#status-hint { flex:1; text-align:right; }
+#prop-panel {
+  position:absolute; right:10px; top:50px; width:220px;
+  background:var(--bg2); border:1px solid var(--border); border-radius:6px;
+  padding:10px; font-size:12px; display:none; z-index:10;
+}
+#prop-panel h4 { margin-bottom:8px; color:var(--accent); }
+#prop-panel .row { display:flex; align-items:center; margin-bottom:4px; gap:6px; }
+#prop-panel .row label { width:50px; color:var(--text2); flex-shrink:0; }
+#prop-panel .row input {
+  flex:1; background:var(--bg); border:1px solid var(--border); color:var(--text);
+  padding:3px 6px; border-radius:3px; font-size:11px;
+}
+#prop-panel button { margin-top:6px; padding:3px 10px; background:var(--accent); color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px; }
+.overlay {
+  display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.6); z-index:100; justify-content:center; align-items:center;
+}
+.overlay.show { display:flex; }
+.overlay-panel {
+  background:var(--bg2); border:1px solid var(--border); border-radius:8px;
+  padding:16px 20px; max-width:500px; width:90%; color:var(--text); font-size:12px;
+  max-height:80vh; overflow-y:auto;
+}
+.overlay-panel h3 { color:var(--accent); margin-bottom:10px; }
+.overlay-panel h4 { color:var(--accent); }
+.overlay-panel table { width:100%; border-collapse:collapse; }
+.overlay-panel td { padding:3px 8px; border-bottom:1px solid var(--bg); }
+.overlay-panel td:first-child { color:#f39c12; white-space:nowrap; font-family:monospace; width:40%; }
+.overlay-panel .close-btn { float:right; background:none; border:none; color:var(--text2); cursor:pointer; font-size:18px; }
+.overlay-panel .close-btn:hover { color:var(--text); }
+.overlay-panel p { margin:2px 0; }
+
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <div class="group">
+    <button id="btn-select" class="active" title="选择/移动 (1)">▶ 选择</button>
+    <button id="btn-smd" title="放置贴片器件 (2)">◧ 贴片</button>
+    <button id="btn-header" title="放置排针/排座 (3)">▣ 排针</button>
+    <button id="btn-flywire" title="放置飞线 (4)">∼ 飞线</button>
+    <button id="btn-solder" title="焊锡走线 (5)">━ 焊锡</button>
+    <button id="btn-eraser" title="橡皮擦 (6)">⌫ 橡皮擦</button>
+  </div>
+  <span class="sep"></span>
+  <div class="group">
+    <button id="btn-undo" title="撤销 (Ctrl+Z)">↩ 撤销</button>
+    <button id="btn-redo" title="重做 (Ctrl+Y)">↪ 重做</button>
+  </div>
+  <span class="sep"></span>
+  <div class="group">
+    <button id="btn-delete" title="删除 (Delete)">✕ 删除</button>
+    <button id="btn-rotate" title="旋转 (Ctrl+R)">↻ 旋转</button>
+    <button id="btn-fliph" title="水平翻转 (H)">⇔ 水平翻转</button>
+    <button id="btn-flipv" title="垂直翻转 (V)">⇕ 垂直翻转</button>
+  </div>
+  <span class="sep"></span>
+  <div class="group">
+    <button id="btn-group" title="将选中器件编组 (G)">🔗 编组</button>
+    <button id="btn-ungroup" title="拆分选中组 (U)">💔 拆组</button>
+  </div>
+  <span class="sep"></span>
+  <button id="btn-home" title="回到原点 (0,0)">🏠 原点</button>
+  <span class="sep"></span>
+  <button id="btn-features" title="功能介绍">📖 功能介绍</button>
+  <button id="btn-version" title="新版本介绍">🆕 v1.1</button>
+  <button id="btn-help" title="快捷键说明">?</button>
+  <button id="btn-theme" title="切换浅色/深色模式">🌓</button>
+  <span class="sep"></span>
+  <button id="btn-newfile" title="新建空白布局">+ 新建</button>
+  <button id="btn-openfile" title="打开JSON文件">📂 打开</button>
+  <button id="btn-save" title="保存当前文件 (Ctrl+S)">💾 保存</button>
+  <button id="btn-saveas" title="另存为新文件">📥 另存为</button>
+  <input type="file" id="open-file-input" accept=".json" style="display:none">
+</div>
+
+<div id="main-area">
+  <div id="sidebar">
+    <h3>📁 工作区</h3>
+    <div id="workspace-list" style="font-size:11px;padding:4px;"></div>
+    <div style="padding:4px;display:flex;gap:4px;">
+      <button id="btn-ws-import" style="flex:1;font-size:10px;padding:3px 6px;background:var(--btn-bg);color:var(--btn-text);border:1px solid var(--border);border-radius:3px;cursor:pointer;">导入文件</button>
+      <button id="btn-ws-clear" style="flex:1;font-size:10px;padding:3px 6px;background:var(--btn-bg);color:var(--btn-text);border:1px solid var(--border);border-radius:3px;cursor:pointer;">清空列表</button>
+    </div>
+    <input type="file" id="ws-file-input" accept=".json" multiple style="display:none">
+    <h3 style="margin-top:8px;">📋 器件列表</h3>
+    <div id="comp-list"></div>
+  </div>
+  <div id="canvas-wrap"><canvas id="canvas" tabindex="0"></canvas></div>
+</div>
+
+<div id="prop-panel">
+  <h4>属性</h4>
+  <div class="row"><label>名称</label><input id="prop-name"></div>
+  <div class="row" id="prop-type-row"><label>类型</label><span id="prop-type"></span></div>
+  <div class="row" id="prop-pos-row"><label>位置</label><span id="prop-pos"></span></div>
+  <div class="row" id="prop-color-row" style="display:none"><label>颜色</label><input type="color" id="prop-color" value="#e94560"></div>
+  <div id="prop-pins-row" style="display:none"><label style="color:#999;margin-bottom:4px;">引脚标签 (双击画布上引脚编辑)</label><div id="prop-pins" style="font-size:10px;color:#aaa;max-height:100px;overflow-y:auto;"></div></div>
+  <button id="prop-apply">应用</button>
+</div>
+
+<div id="help-overlay" class="overlay" onclick="if(event.target===this) this.classList.remove('show')">
+  <div id="help-panel" class="overlay-panel">
+    <button class="close-btn" onclick="document.getElementById('help-overlay').classList.remove('show')">&times;</button>
+    <h3>快捷键说明</h3>
+    <table>
+      <tr><td>1 / 2 / 3 / 4 / 5 / 6</td><td>切换模式：选择 / 贴片 / 排针 / 飞线 / 焊锡 / 橡皮擦</td></tr>
+      <tr><td>滚轮</td><td>缩放画布（以鼠标为中心）</td></tr>
+      <tr><td>右键拖动</td><td>平移画布</td></tr>
+      <tr><td>左键短按</td><td>选中器件 / 焊锡段 / 飞线</td></tr>
+      <tr><td>左键长按器件</td><td>拖动移动器件</td></tr>
+      <tr><td>左键拖动空白</td><td>矩形框选</td></tr>
+      <tr><td>Ctrl+点击</td><td>多选/取消选中（器件+走线+飞线），可混合选择后整体旋转/翻转/移动</td></tr>
+      <tr><td>双击器件</td><td>编辑器件名称</td></tr>
+      <tr><td>双击排针引脚</td><td>标注引脚标签</td></tr>
+      <tr><td>焊锡模式</td><td>双击开始 / 单击固定段 / 双击结束</td></tr>
+      <tr><td>焊锡模式 Enter</td><td>完成当前焊锡走线</td></tr>
+      <tr><td>Ctrl+Z / Ctrl+Y</td><td>撤销 / 重做</td></tr>
+      <tr><td>Ctrl+C / Ctrl+V / Ctrl+X</td><td>复制 / 粘贴 / 剪切</td></tr>
+      <tr><td>Ctrl+R</td><td>旋转选中器件 / 编组 90°</td></tr>
+      <tr><td>Ctrl+S</td><td>保存当前文件（更新工作区）</td></tr>
+      <tr><td>G / U</td><td>编组 / 拆组</td></tr>
+      <tr><td>H / V</td><td>水平 / 垂直翻转</td></tr>
+      <tr><td>Delete</td><td>删除选中对象 / 焊锡段</td></tr>
+      <tr><td>Escape</td><td>取消操作 / 取消选中</td></tr>
+      <tr><td>?</td><td>显示此快捷键帮助</td></tr>
+      <tr><td>🌓</td><td>切换深色/浅色主题</td></tr>
+    </table>
+  </div>
+</div>
+
+<div id="features-overlay" class="overlay" onclick="if(event.target===this) this.classList.remove('show')">
+  <div class="overlay-panel" style="max-width:600px;">
+    <button class="close-btn" onclick="document.getElementById('features-overlay').classList.remove('show')">&times;</button>
+    <h3>功能介绍</h3>
+    <div style="font-size:13px;line-height:1.7;">
+      <h4 style="margin:8px 0 4px;">走线</h4>
+      <p><b>焊锡走线：</b>曼哈顿路径（上下左右），焊锡模式(5)双击开始/单击固定段/双击结束；自动合并相接走线</p>
+      <p><b>飞线：</b>飞线模式(4)点击两格点创建虚线连接</p>
+      <h4 style="margin:8px 0 4px;">元器件</h4>
+      <p><b>贴片器件：</b>贴片模式(2)点击相邻两格点放置，位于格点之间，可标注名称</p>
+      <p><b>排针/排座：</b>排针模式(3)拖动矩形放置，每格点对应一个引脚，可逐个标注引脚标签</p>
+      <p><b>器件编组：</b>框选后按 G 编组（整体拖动/旋转/翻转），按 U 拆组</p>
+      <h4 style="margin:8px 0 4px;">编辑</h4>
+      <p><b>框选：</b>选择模式下拖动矩形框选器件</p>
+      <p><b>焊锡段选中：</b>点击焊锡段选中（橙色高亮），可拖动移动、Delete 删段</p>
+      <p><b>橡皮擦：</b>橡皮擦模式(6)长按拖拽擦除器件/焊锡段</p>
+      <p><b>焊锡线属性：</b>选中焊锡线/段后右侧面板修改颜色和名称</p>
+      <h4 style="margin:8px 0 4px;">文件管理</h4>
+      <p><b>💾 保存 / Ctrl+S：</b>更新工作区（不弹窗，不下载文件）</p>
+      <p><b>📥 另存为：</b>弹窗命名 + 下载 .json 文件</p>
+      <p><b>侧边栏工作区：</b>点击文件切换（自动保存当前）、× 删除</p>
+      <p>关闭浏览器时自动存 localStorage，下次打开恢复</p>
+    </div>
+  </div>
+</div>
+
+<div id="version-overlay" class="overlay" onclick="if(event.target===this) this.classList.remove('show')">
+  <div class="overlay-panel" style="max-width:500px;">
+    <button class="close-btn" onclick="document.getElementById('version-overlay').classList.remove('show')">&times;</button>
+    <h3>v1.1 新版本介绍</h3>
+    <div style="font-size:13px;line-height:1.8;">
+      <p>✅ <b>焊锡/飞线模式优化：</b>这两种模式下双击不再触发器件命名弹窗</p>
+      <p>✅ <b>界面精简：</b>删除网格大小拖动条（滚轮缩放已覆盖此功能）</p>
+      <p>✅ <b>Edge 浏览器适配：</b>阻止右键手势干扰画布拖动</p>
+      <p>✅ <b>保存可靠性增强：</b>文件切换/操作时多触发点自动保存</p>
+      <p>✅ <b>侧边栏调整：</b>工作区移至器件列表上方</p>
+      <p>✅ <b>工作区智能切换：</b>关闭当前文件后自动切换到相邻文件</p>
+      <p>✅ <b>🏠 原点按钮：</b>一键跳转到格点(0,0)，自动调整缩放</p>
+      <p>✅ <b>📖 功能介绍：</b>随时查看完整功能概览</p>
+      <p>✅ <b>橡皮擦安全提示：</b>切换到橡皮擦模式时显示保存提醒</p>
+    </div>
+  </div>
+</div>
+
+<div id="toast" style="display:none;position:fixed;top:60px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:8px 20px;border-radius:6px;font-size:13px;z-index:9999;pointer-events:none;transition:opacity 0.3s;"></div>
+
+<div id="statusbar">
+  <span id="status-mode">模式: 选择</span>
+  <span id="status-pos">坐标: -</span>
+  <span id="status-zoom">缩放: 100%</span>
+  <span id="status-hint"></span>
+</div>
+<script>
+// ====== constants.js ======
+// ==================== 常量 ====================
+const LONG_PRESS_MS = 300;
+const CLICK_DIST = 5;
+const GRID_HIT_RADIUS_RATIO = 0.4;
+const SEG_HIT_DIST = 8;
+const SMD_HIT_DIST = 12;
+const ZOOM_MIN = 0.15;
+const ZOOM_MAX = 5;
+const ZOOM_STEP = 0.1;
+
+// ==================== 工具函数 ====================
+let _idCounter = 1;
+function uid() { return 'el_' + (_idCounter++); }
+
+function distToSeg(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx*dx + dy*dy;
+  if (len2 === 0) return Math.hypot(px - ax, py - ay);
+  let t = ((px-ax)*dx + (py-ay)*dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + t*dx), py - (ay + t*dy));
+}
+
+// ==================== Polyfill for roundRect ====================
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r) {
+    if (typeof r === 'number') r = {tl:r, tr:r, br:r, bl:r};
+    this.moveTo(x+r.tl, y);
+    this.lineTo(x+w-r.tr, y);
+    this.quadraticCurveTo(x+w, y, x+w, y+r.tr);
+    this.lineTo(x+w, y+h-r.br);
+    this.quadraticCurveTo(x+w, y+h, x+w-r.br, y+h);
+    this.lineTo(x+r.bl, y+h);
+    this.quadraticCurveTo(x, y+h, x, y+h-r.bl);
+    this.lineTo(x, y+r.tl);
+    this.quadraticCurveTo(x, y, x+r.tl, y);
+  };
+}
+
+
+// ====== datamodel.js ======
+// ==================== 数据模型 ====================
+class DataModel {
+  constructor() {
+    this.solderTraces = [];   // {id, points:[{gx,gy},...], color?, name?}
+    this.flyWires = [];       // {id, from:{gx,gy}, to:{gx,gy}}
+    this.smdComponents = [];  // {id, type:'smd', name, gx1,gy1, gx2,gy2, groupId?}
+    this.headerComponents = []; // {id, type:'header', name, gx,gy, w,h, pinLabels:{}, groupId?}
+    this.componentGroups = []; // {id, name, componentIds:[id,...]}
+  }
+
+  allComponents() {
+    return [...this.smdComponents, ...this.headerComponents];
+  }
+
+  findById(id) {
+    for (const arr of [this.smdComponents, this.headerComponents, this.solderTraces, this.flyWires]) {
+      const found = arr.find(e => e.id === id);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  arrayFor(obj) {
+    if (obj.type === 'smd') return this.smdComponents;
+    if (obj.type === 'header') return this.headerComponents;
+    if (obj.points !== undefined) return this.solderTraces;
+    if (obj.from !== undefined) return this.flyWires;
+    return null;
+  }
+
+  remove(obj) {
+    const arr = this.arrayFor(obj);
+    if (!arr) return;
+    const idx = arr.indexOf(obj);
+    if (idx >= 0) arr.splice(idx, 1);
+  }
+
+  addComponent(comp) {
+    if (comp.type === 'smd') this.smdComponents.push(comp);
+    else this.headerComponents.push(comp);
+  }
+
+  addSolderTrace(trace) { this.solderTraces.push(trace); }
+  addFlyWire(fw) { this.flyWires.push(fw); }
+
+  cloneComponent(comp) {
+    const c = JSON.parse(JSON.stringify(comp));
+    c.id = uid();
+    return c;
+  }
+
+  toJSON() {
+    return {
+      smdComponents: this.smdComponents,
+      headerComponents: this.headerComponents,
+      solderTraces: this.solderTraces,
+      flyWires: this.flyWires,
+      componentGroups: this.componentGroups,
+    };
+  }
+
+  fromJSON(data) {
+    if (!data) return;
+    this.smdComponents = data.smdComponents || [];
+    this.headerComponents = data.headerComponents || [];
+    this.solderTraces = data.solderTraces || [];
+    this.flyWires = data.flyWires || [];
+    this.componentGroups = data.componentGroups || [];
+    _idCounter = Math.max(...this._allIds(), 0) + 1;
+  }
+
+  _allIds() {
+    const ids = [];
+    for (const arr of [this.smdComponents, this.headerComponents, this.solderTraces, this.flyWires]) {
+      for (const e of arr) { const n = parseInt(e.id.replace('el_','')); if (!isNaN(n)) ids.push(n); }
+    }
+    return ids;
+  }
+}
+
+
+// ====== hittester.js ======
+// ==================== 命中测试 ====================
+class HitTester {
+  constructor(app) { this.app = app; }
+
+  get model() { return this.app.model; }
+  get gridSize() { return this.app.gridSize; }
+  get zoom() { return this.app.zoom; }
+  get ox() { return this.app.offsetX; }
+  get oy() { return this.app.offsetY; }
+
+  screenToGrid(sx, sy) {
+    return {
+      gx: Math.round((sx - this.ox) / (this.gridSize * this.zoom)),
+      gy: Math.round((sy - this.oy) / (this.gridSize * this.zoom)),
+    };
+  }
+
+  // 浮点格点（不取整），用于平滑拖拽
+  screenToGridFloat(sx, sy) {
+    return {
+      gx: (sx - this.ox) / (this.gridSize * this.zoom),
+      gy: (sy - this.oy) / (this.gridSize * this.zoom),
+    };
+  }
+
+  gridToScreen(gx, gy) {
+    return {
+      sx: gx * this.gridSize * this.zoom + this.ox,
+      sy: gy * this.gridSize * this.zoom + this.oy,
+    };
+  }
+
+  // 找最近的格点
+  nearestGridPoint(sx, sy) {
+    const {gx, gy} = this.screenToGrid(sx, sy);
+    const {sx: gsx, sy: gsy} = this.gridToScreen(gx, gy);
+    const dist = Math.hypot(sx - gsx, sy - gsy);
+    if (dist < this.gridSize * this.zoom * GRID_HIT_RADIUS_RATIO) {
+      return {gx, gy, dist, sx: gsx, sy: gsy};
+    }
+    return null;
+  }
+
+  // 找点击位置的器件（跳过已编组成员，编组后只能选中组整体）
+  componentAt(sx, sy) {
+    let best = null, bestDist = Infinity;
+    for (const comp of this.model.allComponents()) {
+      if (comp.groupId) continue; // 已编组，跳过
+      const d = this._distToComponent(comp, sx, sy);
+      if (d !== null && d < bestDist) { bestDist = d; best = comp; }
+    }
+    if (best) {
+      if (best.type === 'smd') {
+        if (bestDist > this.gridSize * this.zoom + SMD_HIT_DIST) return null;
+      } else {
+        if (bestDist > SMD_HIT_DIST) return null;
+      }
+    }
+    return best;
+  }
+
+  _distToComponent(comp, sx, sy) {
+    if (comp.type === 'smd') {
+      const p1 = this.gridToScreen(comp.gx1, comp.gy1);
+      const p2 = this.gridToScreen(comp.gx2, comp.gy2);
+      const cx = (p1.sx + p2.sx) / 2, cy = (p1.sy + p2.sy) / 2;
+      return Math.hypot(sx - cx, sy - cy);
+    } else {
+      const p = this.gridToScreen(comp.gx, comp.gy);
+      const w = comp.w * this.gridSize * this.zoom;
+      const h = comp.h * this.gridSize * this.zoom;
+      const cx = p.sx + w/2, cy = p.sy + h/2;
+      if (sx >= p.sx && sx <= p.sx + w && sy >= p.sy && sy <= p.sy + h) return 0;
+      // 到矩形边缘的距离
+      const dx = Math.max(p.sx - sx, 0, sx - (p.sx + w));
+      const dy = Math.max(p.sy - sy, 0, sy - (p.sy + h));
+      return Math.hypot(dx, dy);
+    }
+  }
+
+  // 找点击位置的焊锡段
+  solderSegmentAt(sx, sy) {
+    const hitDist = Math.max(8, this.gridSize * this.zoom * 0.25);
+    let best = null, bestDist = hitDist;
+    for (const trace of this.model.solderTraces) {
+      for (let i = 0; i < trace.points.length - 1; i++) {
+        const a = this.gridToScreen(trace.points[i].gx, trace.points[i].gy);
+        const b = this.gridToScreen(trace.points[i+1].gx, trace.points[i+1].gy);
+        const d = distToSeg(sx, sy, a.sx, a.sy, b.sx, b.sy);
+        if (d < bestDist) { bestDist = d; best = {trace, segIdx: i}; }
+      }
+    }
+    return best;
+  }
+
+  // 找点击位置的飞线
+  flyWireAt(sx, sy) {
+    const hitDist = Math.max(8, this.gridSize * this.zoom * 0.25);
+    let best = null, bestDist = hitDist;
+    for (const fw of this.model.flyWires) {
+      const a = this.gridToScreen(fw.from.gx, fw.from.gy);
+      const b = this.gridToScreen(fw.to.gx, fw.to.gy);
+      const d = distToSeg(sx, sy, a.sx, a.sy, b.sx, b.sy);
+      if (d < bestDist) { bestDist = d; best = fw; }
+    }
+    return best;
+  }
+
+  // 找焊锡端点
+  solderEndpointAt(sx, sy) {
+    let best = null, bestDist = this.gridSize * this.zoom * GRID_HIT_RADIUS_RATIO;
+    for (const trace of this.model.solderTraces) {
+      for (const pt of [trace.points[0], trace.points[trace.points.length - 1]]) {
+        const {sx: gsx, sy: gsy} = this.gridToScreen(pt.gx, pt.gy);
+        const d = Math.hypot(sx - gsx, sy - gsy);
+        if (d < bestDist) { bestDist = d; best = {trace, point: pt, isStart: pt === trace.points[0]}; }
+      }
+    }
+    return best;
+  }
+
+  // Ctrl+点击多选命中测试：不跳过编组成员，返回最先命中的对象
+  hitAnythingAt(sx, sy) {
+    const hitDist = Math.max(8, this.gridSize * this.zoom * 0.25);
+
+    // 1. 焊锡段（最近优先）
+    let bestSeg = null, bestSegDist = hitDist;
+    for (const trace of this.model.solderTraces) {
+      for (let i = 0; i < trace.points.length - 1; i++) {
+        const a = this.gridToScreen(trace.points[i].gx, trace.points[i].gy);
+        const b = this.gridToScreen(trace.points[i + 1].gx, trace.points[i + 1].gy);
+        const d = distToSeg(sx, sy, a.sx, a.sy, b.sx, b.sy);
+        if (d < bestSegDist) { bestSegDist = d; bestSeg = {type: 'trace', trace, id: trace.id}; }
+      }
+    }
+    if (bestSeg) return bestSeg;
+
+    // 2. 飞线
+    let bestFw = null, bestFwDist = hitDist;
+    for (const fw of this.model.flyWires) {
+      const a = this.gridToScreen(fw.from.gx, fw.from.gy);
+      const b = this.gridToScreen(fw.to.gx, fw.to.gy);
+      const d = distToSeg(sx, sy, a.sx, a.sy, b.sx, b.sy);
+      if (d < bestFwDist) { bestFwDist = d; bestFw = {type: 'flywire', id: fw.id, obj: fw}; }
+    }
+    if (bestFw) return bestFw;
+
+    // 3. 所有器件（不跳过编组成员）
+    let bestComp = null, bestCompDist = Infinity;
+    for (const comp of this.model.allComponents()) {
+      const d = this._distToComponent(comp, sx, sy);
+      if (d !== null && d < bestCompDist) { bestCompDist = d; bestComp = comp; }
+    }
+    if (bestComp) {
+      const threshold = bestComp.type === 'smd' ? this.gridSize * this.zoom + SMD_HIT_DIST : SMD_HIT_DIST;
+      if (bestCompDist < threshold) return {type: bestComp.type, id: bestComp.id, obj: bestComp};
+    }
+    return null;
+  }
+}
+
+
+// ====== command.js ======
+// ==================== 命令系统 ====================
+class Command {
+  constructor(label, execute, undo) {
+    this.label = label;
+    this._execute = execute;
+    this._undo = undo;
+    this._data = null;
+  }
+  execute() { this._data = this._execute(); }
+  undo() { this._undo(this._data); }
+}
+
+class CommandManager {
+  constructor(app) {
+    this.app = app;
+    this.undoStack = [];
+    this.redoStack = [];
+    this.maxUndo = 100;
+  }
+
+  execute(cmd) {
+    cmd.execute();
+    this.undoStack.push(cmd);
+    if (this.undoStack.length > this.maxUndo) this.undoStack.shift();
+    this.redoStack = [];
+    if (this.app) { this.app._isDirty = true; this.app._needsRender = true; }
+  }
+
+  undo() {
+    if (this.undoStack.length === 0) return false;
+    const cmd = this.undoStack.pop();
+    cmd.undo();
+    this.redoStack.push(cmd);
+    if (this.app) { this.app._isDirty = true; this.app._needsRender = true; }
+    return true;
+  }
+
+  redo() {
+    if (this.redoStack.length === 0) return false;
+    const cmd = this.redoStack.pop();
+    cmd.execute();
+    this.undoStack.push(cmd);
+    if (this.app) { this.app._isDirty = true; this.app._needsRender = true; }
+    return true;
+  }
+
+  clear() { this.undoStack = []; this.redoStack = []; }
+}
+
+
+// ====== renderer.js ======
+// ==================== 渲染器 ====================
+class Renderer {
+  constructor(app) { this.app = app; this.dpr = 1; }
+
+  get canvas() { return this.app.canvas; }
+  get ctx() { return this.app.ctx; }
+  get model() { return this.app.model; }
+  get gridSize() { return this.app.gridSize; }
+  get zoom() { return this.app.zoom; }
+  get ox() { return this.app.offsetX; }
+  get oy() { return this.app.offsetY; }
+
+  gridToScreen(gx, gy) {
+    return {
+      sx: gx * this.gridSize * this.zoom + this.ox,
+      sy: gy * this.gridSize * this.zoom + this.oy,
+    };
+  }
+
+  render() {
+    const ctx = this.ctx;
+    const W = this.canvas.width / this.dpr;
+    const H = this.canvas.height / this.dpr;
+    const light = this.app._isLight;
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.fillStyle = light ? '#f5f5f5' : '#1a1a2e';
+    ctx.fillRect(0, 0, W, H);
+
+    this._drawGrid(W, H, light);
+    this._drawFlyWires();
+    this._drawSolderTraces(light);
+    this._drawSMDComponents(light);
+    this._drawHeaderComponents(light);
+    this._drawSelectionHighlight();
+    this._drawTempElements();
+  }
+
+  _drawGrid(W, H, light) {
+    const ctx = this.ctx;
+    const gs = this.gridSize * this.zoom;
+    if (gs < 6) return;
+
+    const gxMin = Math.floor(-this.ox / gs) - 1;
+    const gxMax = Math.ceil((W - this.ox) / gs) + 1;
+    const gyMin = Math.floor(-this.oy / gs) - 1;
+    const gyMax = Math.ceil((H - this.oy) / gs) + 1;
+
+    ctx.fillStyle = light ? '#ccc' : '#444';
+    const dotR = Math.max(1, gs * 0.06);
+    for (let gx = gxMin; gx <= gxMax; gx++) {
+      for (let gy = gyMin; gy <= gyMax; gy++) {
+        const sx = gx * gs + this.ox;
+        const sy = gy * gs + this.oy;
+        ctx.beginPath();
+        ctx.arc(sx, sy, dotR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  _drawSolderTraces(light) {
+    const ctx = this.ctx;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const defColor = light ? '#c0392b' : '#e94560';
+    for (const trace of this.model.solderTraces) {
+      if (trace.points.length < 2) continue;
+      const tc = trace.color || defColor;
+      // glow
+      ctx.strokeStyle = tc + '4d';
+      ctx.lineWidth = (this.gridSize * this.zoom * 0.45);
+      ctx.beginPath();
+      const p0 = this.gridToScreen(trace.points[0].gx, trace.points[0].gy);
+      ctx.moveTo(p0.sx, p0.sy);
+      for (let i = 1; i < trace.points.length; i++) {
+        const p = this.gridToScreen(trace.points[i].gx, trace.points[i].gy);
+        ctx.lineTo(p.sx, p.sy);
+      }
+      ctx.stroke();
+
+      ctx.strokeStyle = tc;
+      ctx.lineWidth = Math.max(2, this.gridSize * this.zoom * 0.22);
+      ctx.beginPath();
+      const q0 = this.gridToScreen(trace.points[0].gx, trace.points[0].gy);
+      ctx.moveTo(q0.sx, q0.sy);
+      for (let i = 1; i < trace.points.length; i++) {
+        const p = this.gridToScreen(trace.points[i].gx, trace.points[i].gy);
+        ctx.lineTo(p.sx, p.sy);
+      }
+      ctx.stroke();
+
+      for (const pt of [trace.points[0], trace.points[trace.points.length - 1]]) {
+        const p = this.gridToScreen(pt.gx, pt.gy);
+        ctx.fillStyle = tc;
+        ctx.beginPath();
+        ctx.arc(p.sx, p.sy, Math.max(2.5, this.gridSize * this.zoom * 0.16), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // 焊锡线名称
+      if (trace.name) {
+        const mid = trace.points[Math.floor(trace.points.length / 2)];
+        const mp = this.gridToScreen(mid.gx, mid.gy);
+        ctx.fillStyle = light ? '#333' : '#fff';
+        ctx.font = `${Math.max(9, this.gridSize * this.zoom * 0.28)}px "Microsoft YaHei", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(trace.name, mp.sx, mp.sy - 4);
+      }
+    }
+  }
+
+  _drawFlyWires() {
+    const ctx = this.ctx;
+    for (const fw of this.model.flyWires) {
+      const a = this.gridToScreen(fw.from.gx, fw.from.gy);
+      const b = this.gridToScreen(fw.to.gx, fw.to.gy);
+      ctx.strokeStyle = '#4fc3f7';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(a.sx, a.sy);
+      ctx.lineTo(b.sx, b.sy);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 端点小圆
+      ctx.fillStyle = '#4fc3f7';
+      const r = Math.max(2, this.gridSize * this.zoom * 0.1);
+      ctx.beginPath(); ctx.arc(a.sx, a.sy, r, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(b.sx, b.sy, r, 0, Math.PI*2); ctx.fill();
+    }
+  }
+
+  _drawSMDComponents(light) {
+    const ctx = this.ctx;
+    const gs = this.gridSize * this.zoom;
+    for (const comp of this.model.smdComponents) {
+      const a = this.gridToScreen(comp.gx1, comp.gy1);
+      const b = this.gridToScreen(comp.gx2, comp.gy2);
+      const cx = (a.sx + b.sx) / 2, cy = (a.sy + b.sy) / 2;
+      const isH = comp.gy1 === comp.gy2;
+      const bw = isH ? gs * 0.85 : gs * 0.3;
+      const bh = isH ? gs * 0.3 : gs * 0.85;
+
+      ctx.fillStyle = light ? '#2980b9' : '#3498db';
+      ctx.strokeStyle = '#2471a3';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(cx - bw/2, cy - bh/2, bw, bh, 3);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = light ? '#fff' : '#fff';
+      ctx.font = `${Math.max(10, gs * 0.35)}px "Microsoft YaHei", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(comp.name, cx, cy - bh/2 - 4);
+    }
+  }
+
+  _drawHeaderComponents(light) {
+    const ctx = this.ctx;
+    const gs = this.gridSize * this.zoom;
+    for (const comp of this.model.headerComponents) {
+      const p = this.gridToScreen(comp.gx, comp.gy);
+      const w = (comp.w - 1) * gs;
+      const h = (comp.h - 1) * gs;
+      const margin = gs * 0.35;
+
+      const color = light ? '#1e8449' : '#2ecc71';
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.strokeRect(p.sx - margin, p.sy - margin, w + margin*2, h + margin*2);
+
+      ctx.fillStyle = light ? 'rgba(30,132,73,0.08)' : 'rgba(46,204,113,0.1)';
+      ctx.fillRect(p.sx - margin, p.sy - margin, w + margin*2, h + margin*2);
+
+      ctx.fillStyle = color;
+      for (let dx = 0; dx < comp.w; dx++) {
+        for (let dy = 0; dy < comp.h; dy++) {
+          const gsx = (comp.gx + dx) * gs + this.ox;
+          const gsy = (comp.gy + dy) * gs + this.oy;
+          ctx.beginPath();
+          ctx.arc(gsx, gsy, Math.max(2, gs * 0.13), 0, Math.PI*2);
+          ctx.fill();
+        }
+      }
+
+      ctx.fillStyle = color;
+      ctx.font = `bold ${Math.max(10, gs * 0.35)}px "Microsoft YaHei", sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(comp.name, p.sx - margin, p.sy - margin - 4);
+
+      ctx.fillStyle = light ? '#666' : '#aaa';
+      ctx.font = `${Math.max(8, gs * 0.25)}px "Microsoft YaHei", sans-serif`;
+      for (let dx = 0; dx < comp.w; dx++) {
+        for (let dy = 0; dy < comp.h; dy++) {
+          const key = `${dx},${dy}`;
+          if (comp.pinLabels && comp.pinLabels[key]) {
+            const gsx = (comp.gx + dx) * gs + this.ox;
+            const gsy = (comp.gy + dy) * gs + this.oy;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(comp.pinLabels[key], gsx, gsy + gs * 0.1);
+          }
+        }
+      }
+    }
+  }
+
+  _drawSelectionHighlight() {
+    const ctx = this.ctx;
+    const dashLen = 4;
+
+    // 多选框选高亮（混合类型）
+    const multi = this.app._multiSelObjects;
+    if (multi.length > 0) {
+      const gs = this.gridSize * this.zoom;
+      ctx.strokeStyle = '#f39c12'; ctx.lineWidth = 2;
+      ctx.setLineDash([dashLen, dashLen]);
+      for (const o of multi) {
+        if (o.type === 'smd' || o.type === 'header') {
+          const c = this.app.model.findById(o.id);
+          if (!c) continue;
+          if (c.type === 'smd') {
+            const a = this.gridToScreen(c.gx1, c.gy1), b = this.gridToScreen(c.gx2, c.gy2);
+            const cx = (a.sx + b.sx) / 2, cy = (a.sy + b.sy) / 2;
+            const isH = c.gy1 === c.gy2;
+            const bw = isH ? gs * 0.85 + 6 : gs * 0.3 + 6;
+            const bh = isH ? gs * 0.3 + 6 : gs * 0.85 + 6;
+            ctx.strokeRect(cx - bw/2, cy - bh/2, bw, bh);
+          } else {
+            const p = this.gridToScreen(c.gx, c.gy);
+            const w = (c.w - 1) * gs, h = (c.h - 1) * gs, m = gs * 0.35 + 3;
+            ctx.strokeRect(p.sx - m, p.sy - m, w + m*2, h + m*2);
+          }
+        } else if (o.type === 'trace') {
+          const trace = this.app.model.solderTraces.find(t => t.id === o.id);
+          if (!trace || trace.points.length < 2) continue;
+          ctx.beginPath();
+          const p0 = this.gridToScreen(trace.points[0].gx, trace.points[0].gy);
+          ctx.moveTo(p0.sx, p0.sy);
+          for (let i = 1; i < trace.points.length; i++) {
+            const pt = this.gridToScreen(trace.points[i].gx, trace.points[i].gy);
+            ctx.lineTo(pt.sx, pt.sy);
+          }
+          ctx.stroke();
+          for (const pt of [trace.points[0], trace.points[trace.points.length - 1]]) {
+            const p = this.gridToScreen(pt.gx, pt.gy);
+            ctx.fillStyle = '#f39c12';
+            ctx.beginPath(); ctx.arc(p.sx, p.sy, 4, 0, Math.PI*2); ctx.fill();
+          }
+        } else if (o.type === 'flywire') {
+          const fw = this.app.model.flyWires.find(f => f.id === o.id);
+          if (!fw) continue;
+          const a = this.gridToScreen(fw.from.gx, fw.from.gy);
+          const b = this.gridToScreen(fw.to.gx, fw.to.gy);
+          ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
+          ctx.fillStyle = '#f39c12';
+          ctx.beginPath(); ctx.arc(a.sx, a.sy, 4, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(b.sx, b.sy, 4, 0, Math.PI*2); ctx.fill();
+        }
+      }
+      ctx.setLineDash([]);
+    }
+
+    const sel = this.app.selectedObject;
+    if (!sel) return;
+
+    if (sel.type === 'smd') {
+      const a = this.gridToScreen(sel.gx1, sel.gy1);
+      const b = this.gridToScreen(sel.gx2, sel.gy2);
+      const cx = (a.sx + b.sx)/2, cy = (a.sy + b.sy)/2;
+      const isH = sel.gy1 === sel.gy2;
+      const gs = this.gridSize * this.zoom;
+      const bw = isH ? gs * 0.85 + 8 : gs * 0.3 + 8;
+      const bh = isH ? gs * 0.3 + 8 : gs * 0.85 + 8;
+      ctx.strokeStyle = '#f39c12';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([dashLen, dashLen]);
+      ctx.strokeRect(cx - bw/2, cy - bh/2, bw, bh);
+      ctx.setLineDash([]);
+    } else if (sel.type === 'header') {
+      const p = this.gridToScreen(sel.gx, sel.gy);
+      const gs = this.gridSize * this.zoom;
+      const w = (sel.w - 1) * gs;
+      const h = (sel.h - 1) * gs;
+      const m = gs * 0.35 + 3;
+      ctx.strokeStyle = '#f39c12';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([dashLen, dashLen]);
+      ctx.strokeRect(p.sx - m, p.sy - m, w + m*2, h + m*2);
+      ctx.setLineDash([]);
+    } else if (sel.from !== undefined) {
+      // Fly wire
+      const a = this.gridToScreen(sel.from.gx, sel.from.gy);
+      const b = this.gridToScreen(sel.to.gx, sel.to.gy);
+      ctx.strokeStyle = '#f39c12';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([dashLen, dashLen]);
+      ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
+      ctx.setLineDash([]);
+    } else if (sel.componentIds !== undefined) {
+      // 选中组：高亮所有成员
+      const gs = this.gridSize * this.zoom;
+      for (const cid of sel.componentIds) {
+        const c = this.app.model.findById(cid);
+        if (!c) continue;
+        if (c.type === 'smd') {
+          const a = this.gridToScreen(c.gx1, c.gy1), b = this.gridToScreen(c.gx2, c.gy2);
+          const cx = (a.sx + b.sx) / 2, cy = (a.sy + b.sy) / 2;
+          const isH = c.gy1 === c.gy2;
+          const bw = isH ? gs * 0.85 + 8 : gs * 0.3 + 8;
+          const bh = isH ? gs * 0.3 + 8 : gs * 0.85 + 8;
+          ctx.strokeStyle = '#9b59b6'; ctx.lineWidth = 2;
+          ctx.setLineDash([dashLen, dashLen]);
+          ctx.strokeRect(cx - bw/2, cy - bh/2, bw, bh);
+        } else {
+          const p = this.gridToScreen(c.gx, c.gy);
+          const w = (c.w - 1) * gs, h = (c.h - 1) * gs, m = gs * 0.35 + 3;
+          ctx.strokeStyle = '#9b59b6'; ctx.lineWidth = 2.5;
+          ctx.setLineDash([dashLen, dashLen]);
+          ctx.strokeRect(p.sx - m, p.sy - m, w + m*2, h + m*2);
+        }
+      }
+      ctx.setLineDash([]);
+    } else if (sel.trace && sel.segIdx !== undefined) {
+      // 焊锡段选中高亮
+      const gs = this.gridSize * this.zoom;
+      const t0 = this.gridToScreen(sel.trace.points[sel.segIdx].gx, sel.trace.points[sel.segIdx].gy);
+      const t1 = this.gridToScreen(sel.trace.points[sel.segIdx + 1].gx, sel.trace.points[sel.segIdx + 1].gy);
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(245, 158, 11, 0.45)';
+      ctx.lineWidth = Math.max(7, gs * 0.5);
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(t0.sx, t0.sy); ctx.lineTo(t1.sx, t1.sy); ctx.stroke();
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = Math.max(3, gs * 0.26);
+      ctx.beginPath(); ctx.moveTo(t0.sx, t0.sy); ctx.lineTo(t1.sx, t1.sy); ctx.stroke();
+      ctx.fillStyle = '#f59e0b';
+      const er = Math.max(3, gs * 0.18);
+      ctx.beginPath(); ctx.arc(t0.sx, t0.sy, er, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(t1.sx, t1.sy, er, 0, Math.PI * 2); ctx.fill();
+      ctx.lineCap = 'butt';
+    }
+  }
+
+  _drawTempElements() {
+    const ctx = this.ctx;
+    const gs = this.gridSize * this.zoom;
+    const light = this.app._isLight;
+
+    // 临时焊锡路径（正在走线中）
+    const route = this.app.routingState;
+    if (route && route.points.length >= 1) {
+      const previewPts = [...route.points];
+      // 焊锡模式下：显示从最后点到当前格点的预览
+      if (this.app.mode === 'solder') {
+        const gp = this.app.highlightedGridPoint;
+        if (gp && (previewPts[previewPts.length - 1].gx !== gp.gx || previewPts[previewPts.length - 1].gy !== gp.gy)) {
+          const last = previewPts[previewPts.length - 1];
+          if (last.gx !== gp.gx && last.gy !== gp.gy) {
+            if (Math.abs(gp.gx - last.gx) >= Math.abs(gp.gy - last.gy)) {
+              previewPts.push({gx: gp.gx, gy: last.gy});
+            } else {
+              previewPts.push({gx: last.gx, gy: gp.gy});
+            }
+          }
+          previewPts.push({gx: gp.gx, gy: gp.gy});
+        }
+      }
+      if (previewPts.length >= 2) {
+        const mainColor = light ? 'rgba(192,57,43,0.6)' : 'rgba(233,69,96,0.6)';
+        ctx.strokeStyle = mainColor;
+        ctx.lineWidth = Math.max(2, gs * 0.22);
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        const p0 = this.gridToScreen(previewPts[0].gx, previewPts[0].gy);
+        ctx.moveTo(p0.sx, p0.sy);
+        for (let i = 1; i < previewPts.length; i++) {
+          const p = this.gridToScreen(previewPts[i].gx, previewPts[i].gy);
+          ctx.lineTo(p.sx, p.sy);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
+    // 高亮当前格点
+    const gp = this.app.highlightedGridPoint;
+    if (gp) {
+      const p = this.gridToScreen(gp.gx, gp.gy);
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, gs * 0.3, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // 排针预览矩形
+    const headerPreview = this.app.headerPreview;
+    if (headerPreview) {
+      const p = this.gridToScreen(headerPreview.gx, headerPreview.gy);
+      const w = (headerPreview.w - 1) * gs;
+      const h = (headerPreview.h - 1) * gs;
+      const m = gs * 0.35;
+      ctx.strokeStyle = 'rgba(46, 204, 113, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(p.sx - m, p.sy - m, w + m*2, h + m*2);
+      ctx.setLineDash([]);
+    }
+
+    // 飞线第一点标记
+    const flyStart = this.app.flyWireStart;
+    if (flyStart) {
+      const p = this.gridToScreen(flyStart.gx, flyStart.gy);
+      ctx.strokeStyle = '#4fc3f7';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, gs * 0.3, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(79, 195, 247, 0.3)';
+      ctx.fill();
+    }
+
+    // 矩形框选预览
+    const selectRect = this.app._selectRect;
+    if (selectRect && this.app.isDragging) {
+      const x = Math.min(selectRect.sx1, selectRect.sx2);
+      const y = Math.min(selectRect.sy1, selectRect.sy2);
+      const w = Math.abs(selectRect.sx2 - selectRect.sx1);
+      const h = Math.abs(selectRect.sy2 - selectRect.sy1);
+      ctx.strokeStyle = '#f39c12';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(x, y, w, h);
+      ctx.fillStyle = 'rgba(243,156,18,0.08)';
+      ctx.fillRect(x, y, w, h);
+      ctx.setLineDash([]);
+    }
+
+    // SMD 第一点标记
+    const smdStart = this.app.smdStart;
+    if (smdStart) {
+      const p = this.gridToScreen(smdStart.gx, smdStart.gy);
+      ctx.strokeStyle = '#3498db';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, gs * 0.3, 0, Math.PI*2);
+      ctx.stroke();
+    }
+  }
+}
+
+
+// ====== app-core.js ======
+// ==================== 应用主类（核心） ====================
+class App {
+  constructor() {
+    this.model = new DataModel();
+    this.cmdMgr = new CommandManager(this);
+    this.canvas = document.getElementById('canvas');
+    this.ctx = this.canvas.getContext('2d');
+    this.renderer = new Renderer(this);
+    this.hitTester = new HitTester(this);
+
+    // 视口状态
+    this.gridSize = 25;
+    this.zoom = 1;
+    this.offsetX = 0;
+    this.offsetY = 0;
+
+    // 交互状态
+    this.mode = 'select'; // select | smd | header | flywire | solder
+    this.selectedObject = null;
+    this.mouseX = 0;
+    this.mouseY = 0;
+    this.mouseDown = false;
+    this.mouseDownTime = 0;
+    this.mouseDownSX = 0;
+    this.mouseDownSY = 0;
+    this.mouseButton = -1;
+    this.isDragging = false;
+    this.dragStartOffsetX = 0;
+    this.dragStartOffsetY = 0;
+    this.dragCompStart = null;
+    this.dragMouseStart = null;
+    this.dragSegInfo = null;
+    this.dragSegStartPoints = null;
+
+    // 临时状态
+    this.routingState = null;
+    this.routingFromEndpoint = null;
+    this._solderTimer = null;
+    this._toastTimer = null; // 提示消息自动消失定时器
+    this._solderPendingGp = null;
+    this.headerPreview = null;
+    // 矩形框选
+    this._selectRect = null;     // {sx1,sy1,sx2,sy2} 屏幕坐标
+    this._multiSelObjects = [];  // 多选列表 [{type:'smd'|'header'|'trace'|'flywire', id}]
+    this._dragGroupStart = null; // 编组拖拽起始状态
+    this._needsRender = true;    // 脏渲染标记
+    this._lastMX = -1; this._lastMY = -1;
+    this.flyWireStart = null;
+    this.smdStart = null;
+    this.highlightedGridPoint = null;
+
+    // 剪贴板
+    this.clipboard = null;
+
+    // 器件名称计数器
+    this._smdCounter = 0;
+    this._headerCounter = 0;
+
+    // 文件管理
+    this._currentFile = '未命名';
+    this._workspaceFiles = []; // {name, data} 工作区文件列表
+    this._isDirty = false;     // 当前文件是否有未保存修改
+
+    // 主题
+    this._isLight = false;
+
+    this._init();
+  }
+
+  _init() {
+    this._resizeCanvas();
+    window.addEventListener('resize', () => this._resizeCanvas());
+
+    const cw = document.getElementById('canvas-wrap');
+    cw.addEventListener('mousedown', e => { this.canvas.focus(); this._onMouseDown(e); });
+    cw.addEventListener('mousemove', e => this._onMouseMove(e));
+    cw.addEventListener('mouseup', e => this._onMouseUp(e));
+    cw.addEventListener('wheel', e => { e.preventDefault(); this._onWheel(e); }, {passive:false});
+    cw.addEventListener('contextmenu', e => e.preventDefault());
+    cw.addEventListener('dblclick', e => this._onDoubleClick(e));
+
+    document.addEventListener('keydown', e => this._onKeyDown(e));
+
+    this._setupToolbar();
+    this._loadFromStorage();
+    this._startRenderLoop();
+    this._updateStatus();
+    this._updateCompList();
+  }
+
+  _resizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = this.canvas.parentElement.getBoundingClientRect();
+    this.canvas.width = rect.width * dpr;
+    this.canvas.height = rect.height * dpr;
+    this.canvas.style.width = rect.width + 'px';
+    this.canvas.style.height = rect.height + 'px';
+    this.renderer.dpr = dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  _getMousePos(e) {
+    const rect = this.canvas.parentElement.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  // ==================== 渲染循环 ====================
+  _startRenderLoop() {
+    const loop = () => {
+      if (this._needsRender) {
+        this._needsRender = false;
+        this.renderer.render();
+      }
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  }
+
+  // 标记需要重绘（在model变更/滚动/缩放时调用）
+  _markDirty() { this._needsRender = true; }
+}
+
+
+// ====== app-events.js ======
+// ==================== 鼠标事件 ====================
+App.prototype._onMouseDown = function(e) {
+  const pos = this._getMousePos(e);
+  this.mouseX = pos.x; this.mouseY = pos.y;
+  this.mouseDown = true;
+  this.mouseDownTime = Date.now();
+  this.mouseDownSX = pos.x;
+  this.mouseDownSY = pos.y;
+  this.mouseButton = e.button;
+  this.isDragging = false;
+
+  // 右键：开始平移
+  if (e.button === 2) {
+    this.dragStartOffsetX = this.offsetX;
+    this.dragStartOffsetY = this.offsetY;
+    return;
+  }
+
+  if (e.button !== 0) return;
+
+  // 根据模式处理
+  if (this.mode === 'smd') {
+    this._handleSMDClick(pos);
+    return;
+  }
+  if (this.mode === 'flywire') {
+    this._handleFlyWireClick(pos);
+    return;
+  }
+  if (this.mode === 'solder') {
+    this._handleSolderClick(pos);
+    // 焊锡模式下点击即处理完毕，立即清除mouseDown，防止mousemove中的长按检测误触发_updateRouting
+    this.mouseDown = false;
+    this.isDragging = false;
+    return;
+  }
+  if (this.mode === 'header') {
+    this._startHeaderPlace(pos);
+    return;
+  }
+  if (this.mode === 'eraser') {
+    this._eraserErase(pos);
+    return;
+  }
+
+  // 选择模式
+  // Ctrl+点击多选切换
+  if ((e.ctrlKey || e.metaKey) && this.mode === 'select') {
+    const hit = this.hitTester.hitAnythingAt(pos.x, pos.y);
+    if (hit) {
+      this._toggleMultiSelect(hit);
+      this.mouseDown = false; // 防止后续拖拽
+      this._updatePropPanel();
+      this._updateCompList();
+    } else {
+      // Ctrl+点击空白：清空多选
+      this._multiSelObjects = [];
+      this.selectedObject = null;
+      this._updatePropPanel();
+      this._updateCompList();
+    }
+    return;
+  }
+
+  // 检查是否点击了焊锡段
+  const seg = this.hitTester.solderSegmentAt(pos.x, pos.y);
+  if (seg) {
+    // 点击焊锡段，准备可能的拖拽
+    this.selectedObject = seg;
+    this.dragSegInfo = seg;
+    this.dragSegStartPoints = seg.trace.points.map(p => ({gx: p.gx, gy: p.gy}));
+    this._updatePropPanel();
+    this._updateCompList();
+    return;
+  }
+
+  // 检查是否点击了飞线
+  const fw = this.hitTester.flyWireAt(pos.x, pos.y);
+  if (fw) {
+    this.selectedObject = fw;
+    this._updatePropPanel();
+    this._updateCompList();
+    return;
+  }
+
+  // 检查是否点击了器件
+  const comp = this.hitTester.componentAt(pos.x, pos.y);
+  if (comp) {
+    this.selectedObject = comp;
+    this._dragGroupStart = null; // 点击独立器件时清除编组拖拽
+    this.dragCompStart = comp.type === 'smd'
+      ? {gx1: comp.gx1, gy1: comp.gy1, gx2: comp.gx2, gy2: comp.gy2}
+      : {gx: comp.gx, gy: comp.gy};
+    const rf = this.hitTester.screenToGridFloat(pos.x, pos.y);
+    this.dragMouseStart = {gx: rf.gx, gy: rf.gy};
+    this._updatePropPanel();
+    this._updateCompList();
+    return;
+  }
+
+  // 检查是否点击了编组成员（即使componentAt跳过，仍可拖拽整组）
+  const grpComp = this._findGroupedComponentAt(pos.x, pos.y);
+  if (grpComp && grpComp.groupId) {
+    const grp = this.model.componentGroups.find(g => g.id === grpComp.groupId);
+    if (grp) {
+      this.selectedObject = grp;
+      this._dragGroupStart = [];
+      for (const cid of grp.componentIds) {
+        const c = this.model.findById(cid);
+        if (!c) continue;
+        if (c.type === 'smd') this._dragGroupStart.push({comp:c, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
+        else this._dragGroupStart.push({comp:c, gx:c.gx, gy:c.gy});
+      }
+      const rf = this.hitTester.screenToGridFloat(pos.x, pos.y);
+      this.dragMouseStart = {gx: rf.gx, gy: rf.gy};
+      this._updatePropPanel();
+      this._updateCompList();
+      return;
+    }
+  }
+
+  // 选择模式空白处：开始矩形框选（短按拖动即可，移除格点路由避免冲突）
+  this.selectedObject = null;
+  this._multiSelObjects = [];
+  this._selectRect = {sx1: pos.x, sy1: pos.y, sx2: pos.x, sy2: pos.y};
+  this._updatePropPanel();
+  this._updateCompList();
+};
+
+App.prototype._onMouseMove = function(e) {
+  const pos = this._getMousePos(e);
+  const dx = pos.x - this.mouseDownSX;
+  const dy = pos.y - this.mouseDownSY;
+  this.mouseX = pos.x; this.mouseY = pos.y;
+  this._needsRender = true; // 鼠标移动需要重绘（预览线/高亮）
+
+  // 更新格点高亮（焊锡模式始终显示，其他模式仅靠近格点时显示）
+  if (this.mode === 'solder') {
+    this.highlightedGridPoint = this.hitTester.screenToGrid(pos.x, pos.y);
+  } else {
+    this.highlightedGridPoint = this.hitTester.nearestGridPoint(pos.x, pos.y);
+  }
+
+  // 右键平移
+  if (this.mouseDown && this.mouseButton === 2) {
+    this.offsetX = this.dragStartOffsetX + dx;
+    this.offsetY = this.dragStartOffsetY + dy;
+    this.isDragging = true;
+    this._updateStatus();
+    return;
+  }
+
+  // 橡皮擦模式：长按拖拽连续擦除
+  if (this.mode === 'eraser' && this.mouseDown && this.mouseButton === 0) {
+    const elapsed = Date.now() - this.mouseDownTime;
+    if (elapsed >= LONG_PRESS_MS) {
+      this._eraserErase(pos);
+    }
+    return;
+  }
+
+  // 矩形框选更新（短按拖动即可，不要求长按）
+  if (this._selectRect && this.mouseDown && this.mode === 'select') {
+    if (Math.hypot(dx, dy) > 3) {
+      this.isDragging = true;
+      this._selectRect.sx2 = pos.x; this._selectRect.sy2 = pos.y;
+    }
+    return;
+  }
+
+  // 排针放置预览
+  if (this.mouseDown && this.mode === 'header' && this.headerPreview) {
+    const startGp = this.hitTester.nearestGridPoint(this.mouseDownSX, this.mouseDownSY);
+    const hgp = this.highlightedGridPoint;
+    if (startGp && hgp) {
+      const gx = Math.min(startGp.gx, hgp.gx);
+      const gy = Math.min(startGp.gy, hgp.gy);
+      const w = Math.abs(hgp.gx - startGp.gx) + 1;
+      const h = Math.abs(hgp.gy - startGp.gy) + 1;
+      this.headerPreview = {gx, gy, w, h};
+    }
+    return;
+  }
+
+  // 长按检测
+  const elapsed = Date.now() - this.mouseDownTime;
+  const moved = Math.hypot(dx, dy);
+
+  if (this.mouseDown && !this.isDragging) {
+    // 焊锡段拖拽
+    if (this.dragSegInfo && elapsed >= LONG_PRESS_MS) {
+      this.isDragging = true;
+      return;
+    }
+
+    // 器件/编组/框选移动
+    if ((this.dragCompStart || this._dragGroupStart) && this.selectedObject && elapsed >= LONG_PRESS_MS) {
+      // 框选状态下自动转为临时_dragGroupStart
+      const compIds = this._getMultiSelCompIds();
+      if (!this._dragGroupStart && compIds.length >= 2) {
+        this._dragGroupStart = [];
+        for (const cid of compIds) {
+          const c = this.model.findById(cid);
+          if (!c) continue;
+          if (c.type === 'smd') this._dragGroupStart.push({comp:c, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
+          else this._dragGroupStart.push({comp:c, gx:c.gx, gy:c.gy});
+        }
+      }
+      this.isDragging = true;
+      this._moveComponentToCursor(pos);
+      return;
+    }
+  }
+
+  // 已经处于拖拽状态
+  if (this.isDragging) {
+    if (this.dragSegInfo) {
+      this._dragSegment(pos);
+    } else if (this._dragGroupStart || (this.dragCompStart && this.selectedObject)) {
+      this._moveComponentToCursor(pos);
+    } else if (this.routingState) {
+      this._updateRouting(pos);
+    }
+  }
+
+  this._updateStatus();
+};
+
+App.prototype._onMouseUp = function(e) {
+  const pos = this._getMousePos(e);
+  const elapsed = Date.now() - this.mouseDownTime;
+  const moved = Math.hypot(pos.x - this.mouseDownSX, pos.y - this.mouseDownSY);
+
+  if (e.button === 2) {
+    this.mouseDown = false;
+    this.isDragging = false;
+    return;
+  }
+
+  if (e.button !== 0) return;
+
+  // 矩形框选完成
+  if (this._selectRect && this.isDragging) {
+    this._finishRectSelect();
+    this.mouseDown = false; this.isDragging = false;
+    return;
+  }
+  this._selectRect = null;
+
+  // 排针放置完成
+  if (this.mode === 'header' && this.headerPreview) {
+    this._finishHeaderPlace();
+    this.mouseDown = false;
+    this.isDragging = false;
+    return;
+  }
+
+  // 焊锡段拖拽完成
+  if (this.isDragging && this.dragSegInfo) {
+    this._finishSegmentDrag(pos);
+    this.mouseDown = false;
+    this.isDragging = false;
+    return;
+  }
+
+  // 器件/编组/框选移动完成
+  if (this.isDragging && (this._dragGroupStart || (this.dragCompStart && this.selectedObject))) {
+    this._finishComponentMove();
+    this.mouseDown = false;
+    this.isDragging = false;
+    return;
+  }
+
+  this.mouseDown = false;
+  this.isDragging = false;
+  this.dragSegInfo = null;
+  this.dragSegStartPoints = null;
+
+  this._autoSave();
+};
+
+App.prototype._onWheel = function(e) {
+  const pos = this._getMousePos(e);
+  const oldZoom = this.zoom;
+  const delta = -Math.sign(e.deltaY) * ZOOM_STEP;
+  this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom + delta));
+
+  // 以鼠标位置为中心缩放
+  const worldX = (pos.x - this.offsetX) / oldZoom;
+  const worldY = (pos.y - this.offsetY) / oldZoom;
+  this.offsetX = pos.x - worldX * this.zoom;
+  this.offsetY = pos.y - worldY * this.zoom;
+  this._needsRender = true;
+  this._updateStatus();
+};
+
+// ==================== 双击处理 ====================
+App.prototype._onDoubleClick = function(e) {
+  // 焊锡/飞线模式下不触发命名——这两种模式双击有其他用途
+  if (this.mode === 'solder' || this.mode === 'flywire') return;
+
+  const pos = this._getMousePos(e);
+
+  // 检查是否双击了排针引脚
+  const pinHit = this._hitTestHeaderPin(pos.x, pos.y);
+  if (pinHit) {
+    const {comp, dx, dy} = pinHit;
+    const key = `${dx},${dy}`;
+    const curLabel = comp.pinLabels ? comp.pinLabels[key] || '' : '';
+    const newLabel = prompt(`引脚 (${dx+1},${dy+1}) 标签:`, curLabel);
+    if (newLabel !== null) {
+      if (!comp.pinLabels) comp.pinLabels = {};
+      if (newLabel.trim()) {
+        comp.pinLabels[key] = newLabel.trim();
+      } else {
+        delete comp.pinLabels[key];
+      }
+      this._autoSave();
+    }
+    return;
+  }
+
+  // 检查是否双击了器件
+  const comp = this.hitTester.componentAt(pos.x, pos.y);
+  if (comp) {
+    this.selectedObject = comp;
+    this._updatePropPanel();
+    this._updateCompList();
+    const newName = prompt('器件名称:', comp.name);
+    if (newName !== null && newName.trim()) {
+      comp.name = newName.trim();
+      this._updatePropPanel();
+      this._updateCompList();
+      this._autoSave();
+    }
+    return;
+  }
+
+  // 双击飞线
+  const fw = this.hitTester.flyWireAt(pos.x, pos.y);
+  if (fw) {
+    this.selectedObject = fw;
+    this._updateCompList();
+    return;
+  }
+};
+
+App.prototype._hitTestHeaderPin = function(sx, sy) {
+  for (const comp of this.model.headerComponents) {
+    for (let dx = 0; dx < comp.w; dx++) {
+      for (let dy = 0; dy < comp.h; dy++) {
+        const p = this.hitTester.gridToScreen(comp.gx + dx, comp.gy + dy);
+        const dist = Math.hypot(sx - p.sx, sy - p.sy);
+        if (dist < this.gridSize * this.zoom * 0.35) {
+          return {comp, dx, dy};
+        }
+      }
+    }
+  }
+  return null;
+};
+
+// ==================== 键盘快捷键 ====================
+App.prototype._onKeyDown = function(e) {
+  // 如果在输入框中，不处理
+  if (e.target.tagName === 'INPUT') return;
+
+  const ctrl = e.ctrlKey || e.metaKey;
+
+  if (ctrl && e.key === 'z') { e.preventDefault(); this.undo(); return; }
+  if (ctrl && (e.key === 'y' || (e.key === 'Z' && e.shiftKey))) { e.preventDefault(); this.redo(); return; }
+  if (ctrl && e.key === 'c') { e.preventDefault(); this.copy(); return; }
+  if (ctrl && e.key === 'v') { e.preventDefault(); this.paste(); return; }
+  if (ctrl && e.key === 'x') { e.preventDefault(); this.cut(); return; }
+  if (ctrl && e.key === 'r') { e.preventDefault(); this.rotateComponent(); return; }
+  if (ctrl && e.key === 's') { e.preventDefault(); this._save(); return; }
+
+  if (e.key === 'h' || e.key === 'H') { e.preventDefault(); this.flipHorizontal(); return; }
+  if (e.key === 'v' || e.key === 'V') { e.preventDefault(); this.flipVertical(); return; }
+  if (e.key === 'Delete' || e.key === 'Del') { e.preventDefault(); this.deleteSelected(); return; }
+  if (e.key === 'Escape') { e.preventDefault(); this._cancelAll(); return; }
+  if (e.key === 'g' || e.key === 'G') { e.preventDefault(); this._groupSelected(); return; }
+  if (e.key === 'u' || e.key === 'U') { e.preventDefault(); this._ungroupSelected(); return; }
+
+  if (e.key === '1') { this.setMode('select'); return; }
+  if (e.key === '2') { this.setMode('smd'); return; }
+  if (e.key === '3') { this.setMode('header'); return; }
+  if (e.key === '4') { this.setMode('flywire'); return; }
+  if (e.key === '5') { this.setMode('solder'); return; }
+  if (e.key === '6') { this.setMode('eraser'); return; }
+
+  // 焊锡模式下 Enter 完成当前走线
+  if (e.key === 'Enter' && this.mode === 'solder' && this.routingState) {
+    e.preventDefault();
+    if (this._solderTimer) { clearTimeout(this._solderTimer); this._solderTimer = null; }
+    this._solderClickCount = 0;
+    if (this.routingState.points.length >= 2) {
+      this._finishRouting();
+      document.getElementById('status-hint').textContent = '焊锡走线已完成';
+    } else {
+      this.routingState = null;
+      this.routingFromEndpoint = null;
+      document.getElementById('status-hint').textContent = '焊锡走线已取消';
+    }
+  }
+
+  // Ctrl+点击多选切换
+  _toggleMultiSelect(hit) {
+    const idx = this._multiSelObjects.findIndex(
+      o => o.type === hit.type && o.id === hit.id
+    );
+    if (idx >= 0) {
+      // 已选中 → 移除
+      this._multiSelObjects.splice(idx, 1);
+    } else {
+      // 未选中 → 添加
+      this._multiSelObjects.push({type: hit.type, id: hit.id});
+    }
+    if (this._multiSelObjects.length === 0) {
+      this.selectedObject = null;
+    } else {
+      this.selectedObject = null; // 多选活跃时无单选
+    }
+  }
+};
+
+
+// ====== app-solder.js ======
+// ==================== 焊接走线 ====================
+App.prototype._updateRouting = function(pos) {
+  if (!this.routingState) return;
+  const gp = this.hitTester.nearestGridPoint(pos.x, pos.y);
+  if (!gp) return;
+
+  const start = this.routingState.points[0];
+  // 生成曼哈顿路径
+  const points = [{gx: start.gx, gy: start.gy}];
+  const dx = gp.gx - start.gx;
+  const dy = gp.gy - start.gy;
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    if (dx !== 0) points.push({gx: gp.gx, gy: start.gy});
+    if (dy !== 0) points.push({gx: gp.gx, gy: gp.gy});
+  } else {
+    if (dy !== 0) points.push({gx: start.gx, gy: gp.gy});
+    if (dx !== 0) points.push({gx: gp.gx, gy: gp.gy});
+  }
+
+  if (points.length < 2) points.push({gx: gp.gx, gy: gp.gy});
+  this.routingState.points = points;
+};
+
+App.prototype._finishRouting = function() {
+  if (!this.routingState || this.routingState.points.length < 2) {
+    this.routingState = null;
+    this.routingFromEndpoint = null;
+    return;
+  }
+
+  const points = this.routingState.points;
+  const that = this;
+
+  if (this.routingFromEndpoint) {
+    // 延伸已有走线
+    const ep = this.routingFromEndpoint;
+    const oldTrace = ep.trace;
+    const oldPoints = oldTrace.points.map(p => ({gx: p.gx, gy: p.gy}));
+
+    const cmd = new Command('延伸焊锡', () => {
+      if (ep.isStart) {
+        // 在前面添加：反转新点然后追加到前面
+        const newPts = points.slice().reverse();
+        newPts.pop(); // 移除最后一个（和已有起点重合）
+        oldTrace.points = [...newPts, ...oldTrace.points];
+      } else {
+        // 在后面添加
+        const newPts = points.slice(1);
+        oldTrace.points = [...oldTrace.points, ...newPts];
+      }
+      return {trace: oldTrace, oldPoints};
+    }, (data) => {
+      data.trace.points = data.oldPoints;
+    });
+
+    this.cmdMgr.execute(cmd);
+  } else {
+    // 新走线
+    const newTrace = {id: uid(), points: points.map(p => ({gx: p.gx, gy: p.gy}))};
+    const cmd = new Command('添加焊锡走线', () => {
+      that.model.addSolderTrace(newTrace);
+      that._mergeColinear(newTrace);
+      return {trace: newTrace};
+    }, (data) => {
+      that.model.remove(data.trace);
+    });
+
+    this.cmdMgr.execute(cmd);
+  }
+
+  this.routingState = null;
+  this.routingFromEndpoint = null;
+  this._autoSave();
+};
+
+// ==================== 焊锡段拖拽 ====================
+App.prototype._dragSegment = function(pos) {
+  if (!this.dragSegInfo || !this.dragSegStartPoints) return;
+  const gp = this.hitTester.nearestGridPoint(pos.x, pos.y);
+  if (!gp) return;
+
+  const {trace, segIdx} = this.dragSegInfo;
+  const origPts = this.dragSegStartPoints;
+
+  // 判断段方向
+  const a = origPts[segIdx], b = origPts[segIdx + 1];
+  if (a.gy === b.gy) {
+    // 水平段：上下拖动
+    const deltaGY = gp.gy - a.gy;
+    trace.points[segIdx].gy = a.gy + deltaGY;
+    trace.points[segIdx + 1].gy = b.gy + deltaGY;
+  } else if (a.gx === b.gx) {
+    // 垂直段：左右拖动
+    const deltaGX = gp.gx - a.gx;
+    trace.points[segIdx].gx = a.gx + deltaGX;
+    trace.points[segIdx + 1].gx = b.gx + deltaGX;
+  }
+};
+
+App.prototype._finishSegmentDrag = function(pos) {
+  if (!this.dragSegInfo || !this.dragSegStartPoints) return;
+
+  const {trace} = this.dragSegInfo;
+  const newPoints = trace.points.map(p => ({gx: p.gx, gy: p.gy}));
+  const oldPoints = this.dragSegStartPoints.map(p => ({gx: p.gx, gy: p.gy}));
+  const that = this;
+
+  const cmd = new Command('移动焊锡段', () => {
+    trace.points = newPoints.map(p => ({gx: p.gx, gy: p.gy}));
+    return {trace, oldPoints: oldPoints.map(p => ({gx: p.gx, gy: p.gy}))};
+  }, (data) => {
+    data.trace.points = data.oldPoints;
+  });
+
+  this.cmdMgr.execute(cmd);
+  // 拖拽后合并共线点
+  this._mergeColinear(trace);
+  this.dragSegInfo = null;
+  this.dragSegStartPoints = null;
+  this.selectedObject = null;
+  this._autoSave();
+};
+
+// ==================== 放置操作（焊锡部分） ====================
+// 焊锡模式的mousedown入口：用点击计数区分单击/双击
+App.prototype._handleSolderClick = function(pos) {
+  // 直接用 screenToGrid 而非 nearestGridPoint，保证空白处也能落到格点
+  const gp = this.hitTester.screenToGrid(pos.x, pos.y);
+  if (!gp) return;
+
+  this._solderClickCount = (this._solderClickCount || 0) + 1;
+  if (this._solderClickCount === 1) {
+    // 第一次点击 → 启动定时器，280ms后认定为单击
+    this._solderClickPos = {gx: gp.gx, gy: gp.gy};
+    if (this._solderTimer) clearTimeout(this._solderTimer);
+    this._solderTimer = setTimeout(() => {
+      this._solderTimer = null;
+      this._solderClickCount = 0;
+      this._handleSolderSingleClick(this._solderClickPos);
+    }, 280);
+  } else {
+    // 第二次点击在280ms内到达 → 双击
+    if (this._solderTimer) { clearTimeout(this._solderTimer); this._solderTimer = null; }
+    this._solderClickCount = 0;
+    this._handleSolderDoubleClick({gx: gp.gx, gy: gp.gy});
+  }
+};
+
+// 单击逻辑：固定当前段并继续（要求已有活跃走线）
+App.prototype._handleSolderSingleClick = function(gp) {
+  if (!this.routingState) {
+    // 没有活跃走线时单击 → 给提示，要求双击开始
+    document.getElementById('status-hint').textContent = '焊锡模式：双击格点开始走线';
+    return;
+  }
+  const last = this.routingState.points[this.routingState.points.length - 1];
+  if (last.gx === gp.gx && last.gy === gp.gy) return;
+
+  // 添加曼哈顿路径（必要时插入中间点）
+  if (last.gx !== gp.gx && last.gy !== gp.gy) {
+    if (Math.abs(gp.gx - last.gx) >= Math.abs(gp.gy - last.gy)) {
+      this.routingState.points.push({gx: gp.gx, gy: last.gy});
+    } else {
+      this.routingState.points.push({gx: last.gx, gy: gp.gy});
+    }
+  }
+  this.routingState.points.push({gx: gp.gx, gy: gp.gy});
+  this._commitAndContinueRouting();
+};
+
+// 双击逻辑：开始 或 结束走线
+App.prototype._handleSolderDoubleClick = function(gp) {
+  if (!this.routingState) {
+    // 没有活跃走线 → 双击开始
+    const screenPos = this.hitTester.gridToScreen(gp.gx, gp.gy);
+    const ep = this.hitTester.solderEndpointAt(screenPos.sx, screenPos.sy);
+    if (ep) {
+      this.routingFromEndpoint = ep;
+      this.routingState = {points: [{gx: ep.point.gx, gy: ep.point.gy}]};
+    } else {
+      this.routingState = {points: [{gx: gp.gx, gy: gp.gy}]};
+    }
+    document.getElementById('status-hint').textContent = '焊锡走线已开始 | 单击固定段 | 双击结束';
+    return;
+  }
+
+  // 已有活跃走线 → 双击结束（先把双击点作为终点提交）
+  const last = this.routingState.points[this.routingState.points.length - 1];
+  if (last.gx !== gp.gx || last.gy !== gp.gy) {
+    if (last.gx !== gp.gx && last.gy !== gp.gy) {
+      if (Math.abs(gp.gx - last.gx) >= Math.abs(gp.gy - last.gy)) {
+        this.routingState.points.push({gx: gp.gx, gy: last.gy});
+      } else {
+        this.routingState.points.push({gx: last.gx, gy: gp.gy});
+      }
+    }
+    this.routingState.points.push({gx: gp.gx, gy: gp.gy});
+  }
+  if (this.routingState.points.length >= 2) {
+    this._finishRouting();
+  } else {
+    this.routingState = null;
+    this.routingFromEndpoint = null;
+  }
+  document.getElementById('status-hint').textContent = '焊锡走线已完成';
+};
+
+// 提交当前焊锡段并继续从终点走线
+App.prototype._commitAndContinueRouting = function() {
+  if (!this.routingState || this.routingState.points.length < 2) return;
+
+  const pts = this.routingState.points;
+  const that = this;
+
+  if (this.routingFromEndpoint) {
+    const ep = this.routingFromEndpoint;
+    const newPts = pts.slice(1);
+    const oldTrace = ep.trace;
+    const oldPoints = oldTrace.points.map(p => ({gx: p.gx, gy: p.gy}));
+
+    const cmd = new Command('延伸焊锡', () => {
+      if (ep.isStart) {
+        const rev = newPts.slice().reverse();
+        oldTrace.points = [...rev, ...oldTrace.points];
+      } else {
+        oldTrace.points = [...oldTrace.points, ...newPts];
+      }
+      that._mergeColinear(oldTrace);
+      return {trace: oldTrace, oldPoints};
+    }, (data) => { data.trace.points = data.oldPoints; });
+    this.cmdMgr.execute(cmd);
+  } else {
+    const newTrace = {id: uid(), points: pts.map(p => ({gx: p.gx, gy: p.gy}))};
+    const cmd = new Command('添加焊锡走线', () => {
+      that.model.addSolderTrace(newTrace);
+      that._mergeColinear(newTrace);
+      return {trace: newTrace};
+    }, (data) => { that.model.remove(data.trace); });
+    this.cmdMgr.execute(cmd);
+    // 记录新走线的终点引用，后续单击/双击可延续
+    this.routingFromEndpoint = {trace: newTrace, point: newTrace.points[newTrace.points.length - 1], isStart: false};
+  }
+
+  const lastPt = pts[pts.length - 1];
+  this.routingState = {points: [{gx: lastPt.gx, gy: lastPt.gy}]};
+  this._autoSave();
+  document.getElementById('status-hint').textContent = '段已固定 | 单击继续 | 双击结束';
+};
+
+// 合并共线段 + 合并相接的独立焊锡线
+App.prototype._mergeColinear = function(trace) {
+  // 1. 内部共线点简化
+  const pts = trace.points;
+  if (pts.length >= 3) {
+    let i = 1;
+    while (i < pts.length - 1) {
+      const prev = pts[i - 1], curr = pts[i], next = pts[i + 1];
+      if ((prev.gx === curr.gx && curr.gx === next.gx) ||
+          (prev.gy === curr.gy && curr.gy === next.gy)) {
+        pts.splice(i, 1);
+      } else { i++; }
+    }
+  }
+
+  // 2. 跨走线合并：找与 trace 端点相接的其他走线
+  if (pts.length < 2) return;
+  const merged = [trace];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const other of this.model.solderTraces) {
+      if (merged.includes(other) || other.points.length < 2) continue;
+      for (const mt of merged) {
+        const mf = mt.points[0], ml = mt.points[mt.points.length - 1];
+        const of = other.points[0], ol = other.points[other.points.length - 1];
+        // 首-尾相接
+        if (ml.gx === of.gx && ml.gy === of.gy) {
+          mt.points = [...mt.points, ...other.points.slice(1)];
+          this.model.remove(other); merged.push(other); changed = true; break;
+        }
+        // 首-首相接（反转other）
+        if (ml.gx === ol.gx && ml.gy === ol.gy) {
+          mt.points = [...mt.points, ...other.points.slice().reverse().slice(1)];
+          this.model.remove(other); merged.push(other); changed = true; break;
+        }
+        // 尾-首相接
+        if (mf.gx === ol.gx && mf.gy === ol.gy) {
+          mt.points = [...other.points, ...mt.points.slice(1)];
+          this.model.remove(other); merged.push(other); changed = true; break;
+        }
+        // 尾-尾相接（反转other）
+        if (mf.gx === of.gx && mf.gy === of.gy) {
+          mt.points = [...other.points.slice().reverse(), ...mt.points.slice(1)];
+          this.model.remove(other); merged.push(other); changed = true; break;
+        }
+      }
+    }
+  }
+  // 再次内部简化（合并后可能产生新的共线点）
+  for (const mt of merged) {
+    const p = mt.points;
+    if (p.length >= 3) {
+      let i = 1;
+      while (i < p.length - 1) {
+        const prev = p[i - 1], curr = p[i], next = p[i + 1];
+        if ((prev.gx === curr.gx && curr.gx === next.gx) ||
+            (prev.gy === curr.gy && curr.gy === next.gy)) {
+          p.splice(i, 1);
+        } else { i++; }
+      }
+    }
+  }
+};
+
+
+// ====== app-components.js ======
+// ==================== 器件移动 ====================
+// 查找编组成员（componentAt会跳过，但拖拽和双击引脚仍需）
+App.prototype._findGroupedComponentAt = function(sx, sy) {
+  let best = null, bestDist = Infinity;
+  for (const comp of this.model.allComponents()) {
+    if (!comp.groupId) continue;
+    const d = this.hitTester._distToComponent(comp, sx, sy);
+    if (d !== null && d < bestDist) { bestDist = d; best = comp; }
+  }
+  if (best && bestDist < this.gridSize * this.zoom + SMD_HIT_DIST) return best;
+  return null;
+};
+
+App.prototype._moveComponentToCursor = function(pos) {
+  if (!this.dragMouseStart) return;
+  // 使用浮点格点，小幅度鼠标移动也能追踪
+  const rf = this.hitTester.screenToGridFloat(pos.x, pos.y);
+  const dgx = Math.round(rf.gx - this.dragMouseStart.gx);
+  const dgy = Math.round(rf.gy - this.dragMouseStart.gy);
+
+  // 组拖拽
+  if (this._dragGroupStart) {
+    for (const item of this._dragGroupStart) {
+      if (item.gx1 !== undefined) {
+        item.comp.gx1 = item.gx1 + dgx; item.comp.gy1 = item.gy1 + dgy;
+        item.comp.gx2 = item.gx2 + dgx; item.comp.gy2 = item.gy2 + dgy;
+      } else {
+        item.comp.gx = item.gx + dgx; item.comp.gy = item.gy + dgy;
+      }
+    }
+    return;
+  }
+
+  if (!this.selectedObject || !this.dragCompStart) return;
+  const comp = this.selectedObject;
+  const start = this.dragCompStart;
+  if (comp.type === 'smd') {
+    comp.gx1 = start.gx1 + dgx; comp.gy1 = start.gy1 + dgy;
+    comp.gx2 = start.gx2 + dgx; comp.gy2 = start.gy2 + dgy;
+  } else if (comp.type === 'header') {
+    comp.gx = start.gx + dgx; comp.gy = start.gy + dgy;
+  }
+  this._updatePropPanel();
+};
+
+App.prototype._finishComponentMove = function() {
+  // 组拖拽完成
+  if (this._dragGroupStart) {
+    const oldItems = this._dragGroupStart.map(item => {
+      if (item.gx1 !== undefined) return {comp:item.comp, gx1:item.gx1, gy1:item.gy1, gx2:item.gx2, gy2:item.gy2};
+      return {comp:item.comp, gx:item.gx, gy:item.gy};
+    });
+    const newItems = this._dragGroupStart.map(item => {
+      if (item.gx1 !== undefined) return {comp:item.comp, gx1:item.comp.gx1, gy1:item.comp.gy1, gx2:item.comp.gx2, gy2:item.comp.gy2};
+      return {comp:item.comp, gx:item.comp.gx, gy:item.comp.gy};
+    });
+    const that = this;
+    const cmd = new Command('移动编组', () => {
+      for (const n of newItems) {
+        if (n.gx1 !== undefined) { n.comp.gx1=n.gx1; n.comp.gy1=n.gy1; n.comp.gx2=n.gx2; n.comp.gy2=n.gy2; }
+        else { n.comp.gx=n.gx; n.comp.gy=n.gy; }
+      }
+      return {oldItems};
+    }, (data) => {
+      for (const o of data.oldItems) {
+        if (o.gx1 !== undefined) { o.comp.gx1=o.gx1; o.comp.gy1=o.gy1; o.comp.gx2=o.gx2; o.comp.gy2=o.gy2; }
+        else { o.comp.gx=o.gx; o.comp.gy=o.gy; }
+      }
+    });
+    this.cmdMgr.execute(cmd);
+    this._dragGroupStart = null;
+    this._updatePropPanel(); this._updateCompList(); this._autoSave();
+    return;
+  }
+  if (!this.selectedObject || !this.dragCompStart) return;
+  const comp = this.selectedObject;
+  const newState = comp.type === 'smd'
+    ? {gx1: comp.gx1, gy1: comp.gy1, gx2: comp.gx2, gy2: comp.gy2}
+    : {gx: comp.gx, gy: comp.gy};
+  const oldState = this.dragCompStart;
+  const that = this;
+
+  // 先恢复到原始状态，让execute重新设置
+  if (comp.type === 'smd') {
+    comp.gx1 = oldState.gx1; comp.gy1 = oldState.gy1;
+    comp.gx2 = oldState.gx2; comp.gy2 = oldState.gy2;
+  } else {
+    comp.gx = oldState.gx; comp.gy = oldState.gy;
+  }
+
+  const cmd = new Command('移动器件', () => {
+    if (comp.type === 'smd') {
+      comp.gx1 = newState.gx1; comp.gy1 = newState.gy1;
+      comp.gx2 = newState.gx2; comp.gy2 = newState.gy2;
+    } else {
+      comp.gx = newState.gx; comp.gy = newState.gy;
+    }
+    return {comp, oldState};
+  }, (data) => {
+    if (data.comp.type === 'smd') {
+      data.comp.gx1 = data.oldState.gx1; data.comp.gy1 = data.oldState.gy1;
+      data.comp.gx2 = data.oldState.gx2; data.comp.gy2 = data.oldState.gy2;
+    } else {
+      data.comp.gx = data.oldState.gx; data.comp.gy = data.oldState.gy;
+    }
+  });
+
+  this.cmdMgr.execute(cmd);
+  this.dragCompStart = null;
+  this.dragMouseStart = null;
+  this._updatePropPanel();
+  this._updateCompList();
+  this._autoSave();
+};
+
+// ==================== 放置操作（SMD/飞线/排针） ====================
+App.prototype._handleSMDClick = function(pos) {
+  const gp = this.hitTester.nearestGridPoint(pos.x, pos.y);
+  if (!gp) return;
+
+  if (!this.smdStart) {
+    this.smdStart = {gx: gp.gx, gy: gp.gy};
+    return;
+  }
+
+  // 检查是否相邻
+  const dx = Math.abs(gp.gx - this.smdStart.gx);
+  const dy = Math.abs(gp.gy - this.smdStart.gy);
+  if (!((dx === 1 && dy === 0) || (dx === 0 && dy === 1))) {
+    this.smdStart = {gx: gp.gx, gy: gp.gy}; // 重新选起点
+    return;
+  }
+
+  const that = this;
+  const comp = {
+    id: uid(), type: 'smd',
+    name: `R${that._smdCounter++}`,
+    gx1: this.smdStart.gx, gy1: this.smdStart.gy,
+    gx2: gp.gx, gy2: gp.gy,
+  };
+
+  const cmd = new Command('放置贴片器件', () => {
+    that.model.addComponent(comp);
+    return {comp};
+  }, (data) => {
+    that.model.remove(data.comp);
+  });
+
+  this.cmdMgr.execute(cmd);
+  this.smdStart = null;
+  this.selectedObject = comp;
+  this._updatePropPanel();
+  this._updateCompList();
+  this._autoSave();
+};
+
+App.prototype._handleFlyWireClick = function(pos) {
+  const gp = this.hitTester.nearestGridPoint(pos.x, pos.y);
+  if (!gp) return;
+
+  if (!this.flyWireStart) {
+    this.flyWireStart = {gx: gp.gx, gy: gp.gy};
+    return;
+  }
+
+  if (this.flyWireStart.gx === gp.gx && this.flyWireStart.gy === gp.gy) {
+    this.flyWireStart = null;
+    return;
+  }
+
+  const fw = {id: uid(), from: this.flyWireStart, to: {gx: gp.gx, gy: gp.gy}};
+  const that = this;
+
+  const cmd = new Command('放置飞线', () => {
+    that.model.addFlyWire(fw);
+    return {fw};
+  }, (data) => {
+    that.model.remove(data.fw);
+  });
+
+  this.cmdMgr.execute(cmd);
+  this.flyWireStart = null;
+  this._autoSave();
+};
+
+App.prototype._startHeaderPlace = function(pos) {
+  const gp = this.hitTester.nearestGridPoint(pos.x, pos.y);
+  if (!gp) return;
+  this.headerPreview = {gx: gp.gx, gy: gp.gy, w: 1, h: 1};
+};
+
+App.prototype._finishHeaderPlace = function() {
+  if (!this.headerPreview) return;
+  const that = this;
+  const comp = {
+    id: uid(), type: 'header',
+    name: `J${that._headerCounter++}`,
+    gx: this.headerPreview.gx,
+    gy: this.headerPreview.gy,
+    w: this.headerPreview.w,
+    h: this.headerPreview.h,
+    pinLabels: {},
+  };
+
+  const cmd = new Command('放置排针/排座', () => {
+    that.model.addComponent(comp);
+    return {comp};
+  }, (data) => {
+    that.model.remove(data.comp);
+  });
+
+  this.cmdMgr.execute(cmd);
+  this.headerPreview = null;
+  this.selectedObject = comp;
+  this.mode = 'select';
+  this._updateModeButtons();
+  this._updatePropPanel();
+  this._updateCompList();
+  this._autoSave();
+};
+
+// ==================== 矩形框选/编组 ====================
+App.prototype._finishRectSelect = function() {
+  const r = this._selectRect;
+  if (!r) return;
+  const x1 = Math.min(r.sx1, r.sx2), x2 = Math.max(r.sx1, r.sx2);
+  const y1 = Math.min(r.sy1, r.sy2), y2 = Math.max(r.sy1, r.sy2);
+  if (x2 - x1 < 5 && y2 - y1 < 5) { this._selectRect = null; return; } // 太小忽略
+
+  const ids = [];
+  for (const comp of this.model.allComponents()) {
+    // 获取组件屏幕位置
+    let cx, cy;
+    if (comp.type === 'smd') {
+      const a = this.hitTester.gridToScreen(comp.gx1, comp.gy1);
+      const b = this.hitTester.gridToScreen(comp.gx2, comp.gy2);
+      cx = (a.sx + b.sx) / 2; cy = (a.sy + b.sy) / 2;
+    } else {
+      const p = this.hitTester.gridToScreen(comp.gx, comp.gy);
+      const gs = this.gridSize * this.zoom;
+      cx = p.sx + (comp.w - 1) * gs / 2;
+      cy = p.sy + (comp.h - 1) * gs / 2;
+    }
+    if (cx >= x1 && cx <= x2 && cy >= y1 && cy <= y2) {
+      ids.push({type: comp.type, id: comp.id});
+    }
+  }
+  this._multiSelObjects = ids;
+  if (ids.length > 0) {
+    this.selectedObject = null;
+    document.getElementById('status-hint').textContent = `已框选 ${ids.length} 个器件 | G编组 G拆组`;
+  }
+  this._selectRect = null;
+  this._updateCompList();
+};
+
+// 编组
+App.prototype._groupSelected = function() {
+  const ids = this._getSelectionIds();
+  if (ids.length < 2) { document.getElementById('status-hint').textContent = '至少选2个器件才能编组'; return; }
+  const group = { id: uid(), name: 'Grp' + (this.model.componentGroups.length + 1), componentIds: [...ids] };
+  for (const comp of this.model.allComponents()) {
+    if (ids.includes(comp.id)) comp.groupId = group.id;
+  }
+  this.model.componentGroups.push(group);
+  this._multiSelObjects = [];
+  this.selectedObject = group;
+  this._updateCompList();
+  this._autoSave();
+  document.getElementById('status-hint').textContent = `已编组: ${group.name}`;
+};
+
+// 拆组
+App.prototype._ungroupSelected = function() {
+  const sel = this.selectedObject;
+  if (sel && sel.componentIds) {
+    for (const comp of this.model.allComponents()) {
+      if (comp.groupId === sel.id) comp.groupId = null;
+    }
+    this.model.componentGroups = this.model.componentGroups.filter(g => g.id !== sel.id);
+    this.selectedObject = null;
+    this._dragGroupStart = null; // 清除残留编组拖拽数据
+    this._updateCompList();
+    this._autoSave();
+    document.getElementById('status-hint').textContent = '已拆组';
+  } else if (this._getMultiSelCompIds().length >= 2) {
+    const compIds = this._getMultiSelCompIds();
+    for (const comp of this.model.allComponents()) {
+      if (compIds.includes(comp.id)) comp.groupId = null;
+    }
+    document.getElementById('status-hint').textContent = '已拆组';
+  }
+};
+
+// 从多选对象中提取仅组件的ID列表（用于编组/旋转/翻转等组件专用操作）
+App.prototype._getMultiSelCompIds = function() {
+  return this._multiSelObjects
+    .filter(o => o.type === 'smd' || o.type === 'header')
+    .map(o => o.id);
+};
+
+// 获取当前选中的所有对象（统一多选/单选/编组）
+App.prototype._getAllSelectedObjects = function() {
+  if (this._multiSelObjects.length > 0) return [...this._multiSelObjects];
+  if (this.selectedObject) {
+    if (this.selectedObject.componentIds) {
+      return this.selectedObject.componentIds.map(id => {
+        const c = this.model.findById(id);
+        return c ? {type: c.type, id} : null;
+      }).filter(Boolean);
+    }
+    if (this.selectedObject.type === 'smd' || this.selectedObject.type === 'header') {
+      return [{type: this.selectedObject.type, id: this.selectedObject.id}];
+    }
+    if (this.selectedObject.trace && this.selectedObject.segIdx !== undefined) {
+      return [{type: 'trace', id: this.selectedObject.trace.id}];
+    }
+    if (this.selectedObject.from !== undefined) {
+      return [{type: 'flywire', id: this.selectedObject.id}];
+    }
+  }
+  return [];
+};
+
+// 获取当前多选id列表（组件ID，兼容旧接口）
+App.prototype._getSelectionIds = function() {
+  if (this._multiSelObjects.length > 0) return this._getMultiSelCompIds();
+  if (this.selectedObject) {
+    if (this.selectedObject.componentIds) return this.selectedObject.componentIds;
+    if (this.selectedObject.id) return [this.selectedObject.id];
+  }
+  return [];
+};
+
+// 多选移动
+App.prototype._moveMultiSelection = function(dgx, dgy) {
+  const ids = this._getSelectionIds();
+  for (const comp of this.model.allComponents()) {
+    if (!ids.includes(comp.id)) continue;
+    if (comp.type === 'smd') {
+      comp.gx1 += dgx; comp.gy1 += dgy;
+      comp.gx2 += dgx; comp.gy2 += dgy;
+    } else {
+      comp.gx += dgx; comp.gy += dgy;
+    }
+  }
+};
+
+// 橡皮擦模式：长按拖拽擦除
+App.prototype._eraserErase = function(pos) {
+  // 擦除焊锡段
+  const seg = this.hitTester.solderSegmentAt(pos.x, pos.y);
+  if (seg) {
+    const trace = seg.trace; const i = seg.segIdx;
+    const oldTraceData = {id: trace.id, points: trace.points.map(p=>({gx:p.gx,gy:p.gy})), color: trace.color, name: trace.name};
+    const that = this;
+    const cmd = new Command('橡皮擦-焊锡段', () => {
+      that.model.remove(trace);
+      const leftPts = oldTraceData.points.slice(0, i + 1);
+      const rightPts = oldTraceData.points.slice(i + 1);
+      const ids = [];
+      if (leftPts.length >= 2) { const t = {id: uid(), points: leftPts, color: oldTraceData.color, name: oldTraceData.name}; that.model.addSolderTrace(t); ids.push(t.id); }
+      if (rightPts.length >= 2) { const t = {id: uid(), points: rightPts, color: oldTraceData.color, name: oldTraceData.name}; that.model.addSolderTrace(t); ids.push(t.id); }
+      return {oldTraceData, newIds: ids};
+    }, (data) => {
+      for (const id of data.newIds) { const t = that.model.solderTraces.find(tr => tr.id === id); if (t) that.model.remove(t); }
+      that.model.addSolderTrace({id: data.oldTraceData.id, points: data.oldTraceData.points, color: data.oldTraceData.color, name: data.oldTraceData.name});
+    });
+    this.cmdMgr.execute(cmd); this._autoSave(); return;
+  }
+  // 擦除飞线
+  const fw = this.hitTester.flyWireAt(pos.x, pos.y);
+  if (fw) {
+    const saved = {id: fw.id, from: {gx:fw.from.gx,gy:fw.from.gy}, to: {gx:fw.to.gx,gy:fw.to.gy}};
+    const that = this;
+    const cmd = new Command('橡皮擦-飞线', () => { that.model.remove(fw); return {saved}; }, (data) => { that.model.addFlyWire(data.saved); });
+    this.cmdMgr.execute(cmd); this._autoSave(); return;
+  }
+  // 擦除器件（保存完整数据以可靠恢复）
+  const comp = this.hitTester.componentAt(pos.x, pos.y);
+  if (comp) {
+    const saved = JSON.parse(JSON.stringify(comp));
+    const that = this;
+    const cmd = new Command('橡皮擦-器件', () => {
+      that.model.remove(comp); return {saved};
+    }, (data) => {
+      that.model.addComponent(data.saved);
+    });
+    this.cmdMgr.execute(cmd); this._autoSave(); return;
+  }
+  // 擦除编组成员
+  const gc = this._findGroupedComponentAt(pos.x, pos.y);
+  if (gc) {
+    const gid = gc.groupId;
+    for (const c of this.model.allComponents()) { if (c.groupId === gid) c.groupId = null; }
+    this.model.componentGroups = this.model.componentGroups.filter(g => g.id !== gid);
+    this._updateCompList(); this._autoSave();
+  }
+};
+
+App.prototype._cancelAll = function() {
+  this.routingState = null;
+  this.routingFromEndpoint = null;
+  if (this._solderTimer) { clearTimeout(this._solderTimer); this._solderTimer = null; }
+  if (this._toastTimer) { clearTimeout(this._toastTimer); this._toastTimer = null; }
+  this._solderPendingGp = null;
+  this._solderClickCount = 0;
+  this._solderClickPos = null;
+  this._selectRect = null;
+  this._multiSelObjects = [];
+  this.headerPreview = null;
+  this.flyWireStart = null;
+  this.smdStart = null;
+  this.dragSegInfo = null;
+  this.dragSegStartPoints = null;
+  this.dragCompStart = null;
+  this.dragMouseStart = null;
+  this.selectedObject = null;
+  this.isDragging = false;
+  this.mouseDown = false;
+  this._updatePropPanel();
+  this._updateCompList();
+};
+
+
+// ====== app-edit.js ======
+// ==================== 编辑操作 ====================
+App.prototype.undo = function() { this.cmdMgr.undo(); this._afterEdit(); };
+App.prototype.redo = function() { this.cmdMgr.redo(); this._afterEdit(); };
+
+App.prototype.copy = function() {
+  const sel = this.selectedObject;
+  if (!sel || (sel.type !== 'smd' && sel.type !== 'header')) return;
+  this.clipboard = this.model.cloneComponent(sel);
+  document.getElementById('status-hint').textContent = '已复制';
+};
+
+App.prototype.cut = function() {
+  const sel = this.selectedObject;
+  if (!sel || (sel.type !== 'smd' && sel.type !== 'header')) return;
+  this.clipboard = this.model.cloneComponent(sel);
+  this.deleteSelected();
+  document.getElementById('status-hint').textContent = '已剪切';
+};
+
+App.prototype.paste = function() {
+  if (!this.clipboard) return;
+  const clone = JSON.parse(JSON.stringify(this.clipboard));
+  clone.id = uid();
+  // 偏移
+  if (clone.type === 'smd') {
+    clone.gx1 += 2; clone.gy1 += 2; clone.gx2 += 2; clone.gy2 += 2;
+  } else {
+    clone.gx += 2; clone.gy += 2;
+  }
+  const that = this;
+  const cmd = new Command('粘贴器件', () => {
+    that.model.addComponent(clone);
+    return {comp: clone};
+  }, (data) => {
+    that.model.remove(data.comp);
+  });
+  this.cmdMgr.execute(cmd);
+  this.selectedObject = clone;
+  this._updatePropPanel();
+  this._updateCompList();
+  this._autoSave();
+};
+
+App.prototype._exportJSON = function() {
+  const name = this._currentFile === '未命名' ? 'perfboard-layout' : this._currentFile;
+  this._downloadJSON(name + '.json');
+  document.getElementById('status-hint').textContent = `已导出: ${name}.json`;
+};
+
+App.prototype._downloadJSON = function(filename) {
+  const data = JSON.stringify(this.model.toJSON(), null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+};
+
+App.prototype.deleteSelected = function() {
+  const sel = this.selectedObject;
+  if (!sel) return;
+
+  // 焊锡段：删除该段，前后分裂为两条独立走线
+  if (sel.trace && sel.segIdx !== undefined) {
+    const trace = sel.trace;
+    const i = sel.segIdx;
+    const pts = trace.points;
+    const leftPts = pts.slice(0, i + 1);   // points[0..i]
+    const rightPts = pts.slice(i + 1);      // points[i+1..n]
+    const that = this;
+
+    const cmd = new Command('删除焊锡段', () => {
+      // 移除原走线
+      that.model.remove(trace);
+      // 创建左右两段（至少2个点）
+      const created = [];
+      if (leftPts.length >= 2) {
+        const lt = {id: uid(), points: leftPts.map(p=>({gx:p.gx,gy:p.gy})), color: trace.color, name: trace.name};
+        that.model.addSolderTrace(lt); created.push(lt);
+      }
+      if (rightPts.length >= 2) {
+        const rt = {id: uid(), points: rightPts.map(p=>({gx:p.gx,gy:p.gy})), color: trace.color, name: trace.name};
+        that.model.addSolderTrace(rt); created.push(rt);
+      }
+      return {trace, leftPts, rightPts, created, oldColor: trace.color, oldName: trace.name};
+    }, (data) => {
+      for (const t of data.created) that.model.remove(t);
+      that.model.addSolderTrace(data.trace);
+    });
+
+    this.cmdMgr.execute(cmd);
+    this.selectedObject = null;
+    this._updatePropPanel(); this._updateCompList(); this._autoSave();
+    return;
+  }
+
+  // 普通对象删除
+  const that = this;
+  const arr = this.model.arrayFor(sel);
+  const idx = arr ? arr.indexOf(sel) : -1;
+
+  const cmd = new Command('删除', () => {
+    that.model.remove(sel);
+    return {obj: sel, arr, idx};
+  }, (data) => {
+    if (data.arr) data.arr.splice(data.idx, 0, data.obj);
+  });
+
+  this.cmdMgr.execute(cmd);
+  this.selectedObject = null;
+  this._updatePropPanel();
+  this._updateCompList();
+  this._autoSave();
+};
+
+App.prototype.rotateComponent = function() {
+  const allObjs = this._getAllSelectedObjects();
+  if (allObjs.length === 0) return;
+
+  const bounds = this._computeSelectionBounds(allObjs);
+  if (!bounds) return;
+  const {cx, cy} = bounds;
+
+  const snapshots = this._snapshotAllObjects(allObjs);
+  const that = this;
+
+  const cmd = new Command(allObjs.length >= 2 ? '旋转多选' : '旋转', () => {
+    that._rotateAllObjects(allObjs, cx, cy);
+    return {snapshots: that._snapshotAllObjects(allObjs)};
+  }, (data) => {
+    that._restoreAllObjects(data.snapshots);
+  });
+
+  this.cmdMgr.execute(cmd);
+  this._autoSave();
+};
+
+App.prototype._rotateMulti = function(ids) {
+  // 计算所有组件的中心
+  let sumX = 0, sumY = 0, count = 0;
+  for (const c of this.model.allComponents()) {
+    if (!ids.includes(c.id)) continue;
+    if (c.type === 'smd') { sumX += (c.gx1 + c.gx2) / 2; sumY += (c.gy1 + c.gy2) / 2; count++; }
+    else { sumX += c.gx + (c.w - 1) / 2; sumY += c.gy + (c.h - 1) / 2; count++; }
+  }
+  if (count === 0) return;
+  const cx = sumX / count, cy = sumY / count; // 浮点中心，不取整
+  const that = this;
+  const oldStates = [];
+  for (const c of this.model.allComponents()) {
+    if (!ids.includes(c.id)) continue;
+    if (c.type === 'smd') {
+      oldStates.push({comp: c, old: {gx1: c.gx1, gy1: c.gy1, gx2: c.gx2, gy2: c.gy2}});
+      const dx1 = c.gx1 - cx, dy1 = c.gy1 - cy;
+      const dx2 = c.gx2 - cx, dy2 = c.gy2 - cy;
+      c.gx1 = Math.round(cx - dy1); c.gy1 = Math.round(cy + dx1);
+      c.gx2 = Math.round(cx - dy2); c.gy2 = Math.round(cy + dx2);
+    } else {
+      oldStates.push({comp: c, old: {gx: c.gx, gy: c.gy, w: c.w, h: c.h, pinLabels: c.pinLabels ? JSON.parse(JSON.stringify(c.pinLabels)) : {}}});
+      const dx = c.gx + (c.w - 1) / 2 - cx;
+      const dy = c.gy + (c.h - 1) / 2 - cy;
+      const newCenterX = cx - dy, newCenterY = cy + dx;
+      const oldW = c.w, oldH = c.h;
+      c.w = oldH; c.h = oldW;
+      c.gx = Math.round(newCenterX - (c.w - 1) / 2);
+      c.gy = Math.round(newCenterY - (c.h - 1) / 2);
+      // 引脚标签跟随旋转: 旧(dx,dy)→新(oldH-1-dy, dx)
+      if (c.pinLabels) {
+        const newLabels = {};
+        for (const [key, label] of Object.entries(c.pinLabels)) {
+          const [dx, dy] = key.split(',').map(Number);
+          newLabels[`${oldH - 1 - dy},${dx}`] = label;
+        }
+        c.pinLabels = newLabels;
+      }
+    }
+  }
+  const cmd = new Command('旋转多选', () => { return {oldStates}; }, (data) => {
+    for (const {comp, old} of data.oldStates) {
+      if (old.gx1 !== undefined) { comp.gx1 = old.gx1; comp.gy1 = old.gy1; comp.gx2 = old.gx2; comp.gy2 = old.gy2; }
+      else { comp.gx = old.gx; comp.gy = old.gy; comp.w = old.w; comp.h = old.h; }
+    }
+  });
+  this.cmdMgr.execute(cmd);
+  this._autoSave();
+};
+
+App.prototype._rotateSMD = function(comp) {
+  const old = {gx1: comp.gx1, gy1: comp.gy1, gx2: comp.gx2, gy2: comp.gy2};
+  // 不取整中点，保证旋转后端点仍在格点上且相邻
+  const cx = (comp.gx1 + comp.gx2) / 2;
+  const cy = (comp.gy1 + comp.gy2) / 2;
+  const dx1 = comp.gx1 - cx, dy1 = comp.gy1 - cy;
+  const newGx1 = Math.round(cx - dy1), newGy1 = Math.round(cy + dx1);
+  const newGx2 = Math.round(cx + dy1), newGy2 = Math.round(cy - dx1);
+  const that = this;
+
+  const cmd = new Command('旋转器件', () => {
+    comp.gx1 = newGx1; comp.gy1 = newGy1;
+    comp.gx2 = newGx2; comp.gy2 = newGy2;
+    return {comp, old};
+  }, (data) => {
+    data.comp.gx1 = data.old.gx1; data.comp.gy1 = data.old.gy1;
+    data.comp.gx2 = data.old.gx2; data.comp.gy2 = data.old.gy2;
+  });
+  this.cmdMgr.execute(cmd);
+  this._autoSave();
+};
+
+App.prototype._rotateHeader = function(comp) {
+  const oldW = comp.w, oldH = comp.h;
+  const oldLabels = comp.pinLabels ? JSON.parse(JSON.stringify(comp.pinLabels)) : {};
+  const old = {gx: comp.gx, gy: comp.gy, w: comp.w, h: comp.h, pinLabels: oldLabels};
+  const that = this;
+
+  const cmd = new Command('旋转器件', () => {
+    const cx = comp.gx + Math.floor(comp.w/2);
+    const cy = comp.gy + Math.floor(comp.h/2);
+    comp.w = oldH;
+    comp.h = oldW;
+    comp.gx = cx - Math.floor(comp.w/2);
+    comp.gy = cy - Math.floor(comp.h/2);
+    // 变换引脚标签：旧(dx,dy) → 新(h-1-dy, dx)
+    const newLabels = {};
+    for (const [key, label] of Object.entries(oldLabels)) {
+      const [dx, dy] = key.split(',').map(Number);
+      const newKey = `${oldH - 1 - dy},${dx}`;
+      newLabels[newKey] = label;
+    }
+    comp.pinLabels = newLabels;
+    return {comp, old: {...old, pinLabels: oldLabels}};
+  }, (data) => {
+    data.comp.gx = data.old.gx; data.comp.gy = data.old.gy;
+    data.comp.w = data.old.w; data.comp.h = data.old.h;
+    data.comp.pinLabels = data.old.pinLabels;
+  });
+  this.cmdMgr.execute(cmd);
+  this._autoSave();
+};
+
+App.prototype.flipHorizontal = function() { this._flipGeneric('h'); };
+App.prototype.flipVertical = function() { this._flipGeneric('v'); };
+
+App.prototype._flipGeneric = function(dir) {
+  const allObjs = this._getAllSelectedObjects();
+  if (allObjs.length === 0) return;
+
+  const bounds = this._computeSelectionBounds(allObjs);
+  if (!bounds) return;
+  const {cx, cy} = bounds;
+
+  const snapshots = this._snapshotAllObjects(allObjs);
+  const that = this;
+  const label = dir === 'h' ? (allObjs.length>=2?'水平翻转多选':'水平翻转') : (allObjs.length>=2?'垂直翻转多选':'垂直翻转');
+
+  const cmd = new Command(label, () => {
+    that._flipAllObjects(allObjs, cx, cy, dir);
+    return {snapshots: that._snapshotAllObjects(allObjs)};
+  }, (data) => {
+    that._restoreAllObjects(data.snapshots);
+  });
+  this.cmdMgr.execute(cmd);
+  document.getElementById('status-hint').textContent = `已${dir==='h'?'水平':'垂直'}翻转`;
+  this._autoSave();
+};
+
+App.prototype._flipMulti = function(ids, dir) {
+  let sumX = 0, sumY = 0, count = 0;
+  for (const c of this.model.allComponents()) {
+    if (!ids.includes(c.id)) continue;
+    if (c.type === 'smd') { sumX += (c.gx1 + c.gx2) / 2; sumY += (c.gy1 + c.gy2) / 2; count++; }
+    else { sumX += c.gx + (c.w - 1) / 2; sumY += c.gy + (c.h - 1) / 2; count++; }
+  }
+  if (count === 0) return;
+  const cx = sumX / count, cy = sumY / count; // 浮点中心
+  const that = this;
+  const oldStates = [];
+  for (const c of this.model.allComponents()) {
+    if (!ids.includes(c.id)) continue;
+    if (c.type === 'smd') {
+      oldStates.push({comp: c, old: {gx1: c.gx1, gy1: c.gy1, gx2: c.gx2, gy2: c.gy2}});
+      if (dir === 'h') { c.gx1 = Math.round(2*cx - c.gx1); c.gx2 = Math.round(2*cx - c.gx2); }
+      else { c.gy1 = Math.round(2*cy - c.gy1); c.gy2 = Math.round(2*cy - c.gy2); }
+    } else {
+      oldStates.push({comp: c, old: {gx: c.gx, gy: c.gy, w: c.w, h: c.h, pinLabels: c.pinLabels ? JSON.parse(JSON.stringify(c.pinLabels)) : {}}});
+      if (dir === 'h') {
+        c.gx = Math.round(2*cx - (c.gx + c.w - 1));
+        if (c.pinLabels) {
+          const newLabels = {};
+          for (const [key, label] of Object.entries(c.pinLabels)) {
+            const [dx, dy] = key.split(',').map(Number);
+            newLabels[`${c.w - 1 - dx},${dy}`] = label;
+          }
+          c.pinLabels = newLabels;
+        }
+      } else {
+        c.gy = Math.round(2*cy - (c.gy + c.h - 1));
+        if (c.pinLabels) {
+          const newLabels = {};
+          for (const [key, label] of Object.entries(c.pinLabels)) {
+            const [dx, dy] = key.split(',').map(Number);
+            newLabels[`${dx},${c.h - 1 - dy}`] = label;
+          }
+          c.pinLabels = newLabels;
+        }
+      }
+    }
+  }
+  const cmd = new Command(dir==='h'?'水平翻转多选':'垂直翻转多选', () => { return {oldStates}; }, (data) => {
+    for (const {comp, old} of data.oldStates) {
+      if (old.gx1 !== undefined) { comp.gx1 = old.gx1; comp.gy1 = old.gy1; comp.gx2 = old.gx2; comp.gy2 = old.gy2; }
+      else { comp.gx = old.gx; comp.gy = old.gy; comp.w = old.w; comp.h = old.h; }
+    }
+  });
+  this.cmdMgr.execute(cmd);
+  this._autoSave();
+};
+
+// ==================== 混合类型变换辅助方法 ====================
+App.prototype._computeSelectionBounds = function(allObjs) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let count = 0;
+  for (const obj of allObjs) {
+    if (obj.type === 'smd' || obj.type === 'header') {
+      const c = this.model.findById(obj.id); if (!c) continue;
+      if (c.type === 'smd') {
+        minX = Math.min(minX, c.gx1, c.gx2); minY = Math.min(minY, c.gy1, c.gy2);
+        maxX = Math.max(maxX, c.gx1, c.gx2); maxY = Math.max(maxY, c.gy1, c.gy2);
+      } else {
+        minX = Math.min(minX, c.gx); minY = Math.min(minY, c.gy);
+        maxX = Math.max(maxX, c.gx + c.w - 1); maxY = Math.max(maxY, c.gy + c.h - 1);
+      }
+      count++;
+    } else if (obj.type === 'trace') {
+      const t = this.model.solderTraces.find(tr => tr.id === obj.id); if (!t) continue;
+      for (const pt of t.points) {
+        minX = Math.min(minX, pt.gx); minY = Math.min(minY, pt.gy);
+        maxX = Math.max(maxX, pt.gx); maxY = Math.max(maxY, pt.gy);
+      }
+      count++;
+    } else if (obj.type === 'flywire') {
+      const f = this.model.flyWires.find(fw => fw.id === obj.id); if (!f) continue;
+      minX = Math.min(minX, f.from.gx, f.to.gx); minY = Math.min(minY, f.from.gy, f.to.gy);
+      maxX = Math.max(maxX, f.from.gx, f.to.gx); maxY = Math.max(maxY, f.from.gy, f.to.gy);
+      count++;
+    }
+  }
+  return count > 0 ? {cx: (minX + maxX) / 2, cy: (minY + maxY) / 2} : null;
+};
+
+App.prototype._snapshotAllObjects = function(allObjs) {
+  const snaps = [];
+  for (const obj of allObjs) {
+    if (obj.type === 'smd') {
+      const c = this.model.findById(obj.id); if (!c) continue;
+      snaps.push({type:'smd', id:c.id, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
+    } else if (obj.type === 'header') {
+      const c = this.model.findById(obj.id); if (!c) continue;
+      snaps.push({type:'header', id:c.id, gx:c.gx, gy:c.gy, w:c.w, h:c.h,
+        pinLabels: c.pinLabels ? JSON.parse(JSON.stringify(c.pinLabels)) : {}});
+    } else if (obj.type === 'trace') {
+      const t = this.model.solderTraces.find(tr => tr.id === obj.id); if (!t) continue;
+      snaps.push({type:'trace', id:t.id, points: t.points.map(p=>({gx:p.gx, gy:p.gy}))});
+    } else if (obj.type === 'flywire') {
+      const f = this.model.flyWires.find(fw => fw.id === obj.id); if (!f) continue;
+      snaps.push({type:'flywire', id:f.id, from:{gx:f.from.gx, gy:f.from.gy}, to:{gx:f.to.gx, gy:f.to.gy}});
+    }
+  }
+  return snaps;
+};
+
+App.prototype._restoreAllObjects = function(snaps) {
+  for (const s of snaps) {
+    if (s.type === 'smd') {
+      const c = this.model.findById(s.id); if (c) { c.gx1=s.gx1; c.gy1=s.gy1; c.gx2=s.gx2; c.gy2=s.gy2; }
+    } else if (s.type === 'header') {
+      const c = this.model.findById(s.id); if (c) {
+        c.gx=s.gx; c.gy=s.gy; c.w=s.w; c.h=s.h;
+        if (s.pinLabels && Object.keys(s.pinLabels).length > 0) { c.pinLabels = JSON.parse(JSON.stringify(s.pinLabels)); } else { c.pinLabels = {}; }
+      }
+    } else if (s.type === 'trace') {
+      const t = this.model.solderTraces.find(tr => tr.id === s.id); if (t) t.points = s.points.map(p=>({gx:p.gx, gy:p.gy}));
+    } else if (s.type === 'flywire') {
+      const f = this.model.flyWires.find(fw => fw.id === s.id); if (f) { f.from.gx=s.from.gx; f.from.gy=s.from.gy; f.to.gx=s.to.gx; f.to.gy=s.to.gy; }
+    }
+  }
+};
+
+App.prototype._rotateAllObjects = function(allObjs, cx, cy) {
+  for (const obj of allObjs) {
+    if (obj.type === 'smd') {
+      const c = this.model.findById(obj.id); if (!c) continue;
+      const dx1=c.gx1-cx, dy1=c.gy1-cy, dx2=c.gx2-cx, dy2=c.gy2-cy;
+      c.gx1=Math.round(cx-dy1); c.gy1=Math.round(cy+dx1);
+      c.gx2=Math.round(cx-dy2); c.gy2=Math.round(cy+dx2);
+    } else if (obj.type === 'header') {
+      const c = this.model.findById(obj.id); if (!c) continue;
+      const oldW=c.w, oldH=c.h;
+      const hcx=c.gx+(oldW-1)/2, hcy=c.gy+(oldH-1)/2;
+      const dx=hcx-cx, dy=hcy-cy;
+      const nx=cx-dy, ny=cy+dx;
+      c.w=oldH; c.h=oldW;
+      c.gx=Math.round(nx-(c.w-1)/2); c.gy=Math.round(ny-(c.h-1)/2);
+      if (c.pinLabels) {
+        const nl={}; for (const [k,v] of Object.entries(c.pinLabels)) {
+          const [dx0,dy0]=k.split(',').map(Number); nl[`${oldH-1-dy0},${dx0}`]=v;
+        } c.pinLabels=nl;
+      }
+    } else if (obj.type === 'trace') {
+      const t = this.model.solderTraces.find(tr => tr.id === obj.id); if (!t) continue;
+      for (const pt of t.points) { const dx=pt.gx-cx, dy=pt.gy-cy; pt.gx=Math.round(cx-dy); pt.gy=Math.round(cy+dx); }
+    } else if (obj.type === 'flywire') {
+      const f = this.model.flyWires.find(fw => fw.id === obj.id); if (!f) continue;
+      const dx1=f.from.gx-cx, dy1=f.from.gy-cy, dx2=f.to.gx-cx, dy2=f.to.gy-cy;
+      f.from.gx=Math.round(cx-dy1); f.from.gy=Math.round(cy+dx1);
+      f.to.gx=Math.round(cx-dy2); f.to.gy=Math.round(cy+dx2);
+    }
+  }
+};
+
+App.prototype._flipAllObjects = function(allObjs, cx, cy, dir) {
+  for (const obj of allObjs) {
+    if (obj.type === 'smd') {
+      const c = this.model.findById(obj.id); if (!c) continue;
+      if (dir==='h') { c.gx1=Math.round(2*cx-c.gx1); c.gx2=Math.round(2*cx-c.gx2); }
+      else { c.gy1=Math.round(2*cy-c.gy1); c.gy2=Math.round(2*cy-c.gy2); }
+    } else if (obj.type === 'header') {
+      const c = this.model.findById(obj.id); if (!c) continue;
+      if (dir==='h') {
+        c.gx=Math.round(2*cx-(c.gx+c.w-1));
+        if (c.pinLabels) { const nl={}; for (const [k,v] of Object.entries(c.pinLabels)) {
+          const [dx,dy]=k.split(',').map(Number); nl[`${c.w-1-dx},${dy}`]=v; } c.pinLabels=nl; }
+      } else {
+        c.gy=Math.round(2*cy-(c.gy+c.h-1));
+        if (c.pinLabels) { const nl={}; for (const [k,v] of Object.entries(c.pinLabels)) {
+          const [dx,dy]=k.split(',').map(Number); nl[`${dx},${c.h-1-dy}`]=v; } c.pinLabels=nl; }
+      }
+    } else if (obj.type === 'trace') {
+      const t = this.model.solderTraces.find(tr => tr.id === obj.id); if (!t) continue;
+      for (const pt of t.points) { if (dir==='h') pt.gx=Math.round(2*cx-pt.gx); else pt.gy=Math.round(2*cy-pt.gy); }
+    } else if (obj.type === 'flywire') {
+      const f = this.model.flyWires.find(fw => fw.id === obj.id); if (!f) continue;
+      if (dir==='h') { f.from.gx=Math.round(2*cx-f.from.gx); f.to.gx=Math.round(2*cx-f.to.gx); }
+      else { f.from.gy=Math.round(2*cy-f.from.gy); f.to.gy=Math.round(2*cy-f.to.gy); }
+    }
+  }
+};
+
+App.prototype._afterEdit = function() {
+  this._updatePropPanel();
+  this._updateCompList();
+  this._autoSave();
+};
+
+
+// ====== app-ui.js ======
+// ==================== 模式切换 ====================
+App.prototype.setMode = function(mode) {
+  this._cancelAll();
+  this.mode = mode;
+  this._updateModeButtons();
+  this._updateStatus();
+  // 橡皮擦模式显示安全提示（3秒后自动消失）
+  if (mode === 'eraser') {
+    const toast = document.getElementById('toast');
+    toast.textContent = '⚠️ 记得注意保存哟！';
+    toast.style.display = 'block';
+    toast.style.opacity = '1';
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => { toast.style.display = 'none'; }, 300);
+    }, 3000);
+  }
+};
+
+App.prototype._updateModeButtons = function() {
+  document.querySelectorAll('#toolbar .group:first-child button').forEach(b => b.classList.remove('active'));
+  const map = {select:'btn-select', smd:'btn-smd', header:'btn-header', flywire:'btn-flywire', solder:'btn-solder', eraser:'btn-eraser'};
+  const btn = document.getElementById(map[this.mode]);
+  if (btn) btn.classList.add('active');
+};
+
+// ==================== UI 更新 ====================
+App.prototype._updatePropPanel = function() {
+  const panel = document.getElementById('prop-panel');
+  const sel = this.selectedObject;
+  // 处理 group
+  if (sel && sel.componentIds) {
+    // 确保每次选中组都初始化拖拽数据
+    this._dragGroupStart = [];
+    for (const cid of sel.componentIds) {
+      const c = this.model.findById(cid);
+      if (!c) continue;
+      if (c.type === 'smd') this._dragGroupStart.push({comp:c, gx1:c.gx1, gy1:c.gy1, gx2:c.gx2, gy2:c.gy2});
+      else this._dragGroupStart.push({comp:c, gx:c.gx, gy:c.gy});
+    }
+    panel.style.display = 'block';
+    document.getElementById('prop-name').value = sel.name || '';
+    document.getElementById('prop-type').textContent = `器件组 (${sel.componentIds.length}个)`;
+    document.getElementById('prop-pos').textContent = `包含 ${sel.componentIds.length} 个器件`;
+    document.getElementById('prop-pins-row').style.display = 'none';
+    document.getElementById('prop-color-row').style.display = 'none';
+    return;
+  }
+  // 处理 trace（完整走线或选中段）
+  const traceObj = (sel && sel.points) ? sel : (sel && sel.trace) ? sel.trace : null;
+  if (traceObj) {
+    panel.style.display = 'block';
+    document.getElementById('prop-name').value = traceObj.name || '';
+    document.getElementById('prop-type').textContent = `焊锡走线 (${traceObj.points.length}节点)`;
+    document.getElementById('prop-pos').textContent = sel.trace ? `已选第${sel.segIdx+1}段` : '完整走线';
+    document.getElementById('prop-pins-row').style.display = 'none';
+    document.getElementById('prop-color-row').style.display = 'flex';
+    document.getElementById('prop-color').value = traceObj.color || '#e94560';
+    return;
+  }
+  // 处理多选
+  if (this._multiSelObjects.length > 0) {
+    panel.style.display = 'block';
+    document.getElementById('prop-name').value = '';
+    const compCnt = this._getMultiSelCompIds().length;
+    const traceCnt = this._multiSelObjects.filter(o => o.type === 'trace').length;
+    const fwCnt = this._multiSelObjects.filter(o => o.type === 'flywire').length;
+    let desc = [];
+    if (compCnt) desc.push(`${compCnt}器件`);
+    if (traceCnt) desc.push(`${traceCnt}走线`);
+    if (fwCnt) desc.push(`${fwCnt}飞线`);
+    document.getElementById('prop-type').textContent = `多选 (${desc.join('+')})`;
+    document.getElementById('prop-pos').textContent = 'G编组 | Ctrl+点击增减 | 可拖动/旋转/翻转';
+    document.getElementById('prop-pins-row').style.display = 'none';
+    document.getElementById('prop-color-row').style.display = 'none';
+    return;
+  }
+  if (!sel || (sel.type !== 'smd' && sel.type !== 'header')) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+  document.getElementById('prop-name').value = sel.name || '';
+  document.getElementById('prop-type').textContent = sel.type === 'smd' ? '贴片器件' : '排针/排座';
+  document.getElementById('prop-color-row').style.display = 'none';
+  if (sel.type === 'smd') {
+    document.getElementById('prop-pos').textContent = `(${sel.gx1},${sel.gy1}) - (${sel.gx2},${sel.gy2})`;
+    document.getElementById('prop-pins-row').style.display = 'none';
+  } else {
+    document.getElementById('prop-pos').textContent = `(${sel.gx},${sel.gy}) ${sel.w}×${sel.h}`;
+    const pinsRow = document.getElementById('prop-pins-row');
+    const pinsDiv = document.getElementById('prop-pins');
+    const labels = [];
+    for (let dx = 0; dx < sel.w; dx++) {
+      for (let dy = 0; dy < sel.h; dy++) {
+        const key = `${dx},${dy}`;
+        if (sel.pinLabels && sel.pinLabels[key]) {
+          labels.push(`(${dx+1},${dy+1}): ${sel.pinLabels[key]}`);
+        }
+      }
+    }
+    if (labels.length > 0) { pinsRow.style.display = 'block'; pinsDiv.textContent = labels.join('\n'); }
+    else { pinsRow.style.display = 'none'; }
+  }
+};
+
+App.prototype._updateCompList = function() {
+  const list = document.getElementById('comp-list');
+  const comps = this.model.allComponents();
+  let html = comps.map(c => {
+    const sel = (this.selectedObject && this.selectedObject.id === c.id) || this._multiSelObjects.some(o => o.id === c.id) ? ' selected' : '';
+    const grp = c.groupId ? ' 🔗' : '';
+    const typeLabel = c.type === 'smd' ? '[贴片]' : `[排针 ${c.w}×${c.h}]`;
+    return `<div class="comp-item${sel}" data-id="${c.id}">${typeLabel} ${c.name}${grp}</div>`;
+  }).join('');
+  // 显示组
+  if (this.model.componentGroups.length > 0) {
+    html += '<div style="border-top:1px solid var(--border);margin:4px 0;"></div>';
+    html += this.model.componentGroups.map(g => {
+      const sel = this.selectedObject && this.selectedObject.id === g.id ? ' selected' : '';
+      return `<div class="comp-item${sel}" data-id="${g.id}" style="color:#9b59b6;">🔗 ${g.name} (${g.componentIds.length}器件)</div>`;
+    }).join('');
+  }
+  list.innerHTML = html;
+
+  list.querySelectorAll('.comp-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.id;
+      this._multiSelObjects = [];
+      const comp = this.model.findById(id) || this.model.componentGroups.find(g => g.id === id);
+      if (comp) {
+        this.selectedObject = comp;
+        this._updatePropPanel();
+        this._updateCompList();
+      }
+    });
+    el.addEventListener('dblclick', () => {
+      const id = el.dataset.id;
+      const comp = this.model.findById(id);
+      if (comp) {
+        const newName = prompt('器件名称:', comp.name);
+        if (newName !== null) {
+          comp.name = newName;
+          this._updatePropPanel();
+          this._updateCompList();
+          this._autoSave();
+        }
+      }
+    });
+  });
+};
+
+App.prototype._updateStatus = function() {
+  document.getElementById('status-mode').textContent =
+    `模式: ${{select:'选择', smd:'贴片', header:'排针', flywire:'飞线', solder:'焊锡', eraser:'橡皮擦'}[this.mode]}`;
+  const gp = this.highlightedGridPoint;
+  document.getElementById('status-pos').textContent = gp
+    ? `格点: (${gp.gx}, ${gp.gy})` : '坐标: -';
+  document.getElementById('status-zoom').textContent = `缩放: ${Math.round(this.zoom * 100)}%`;
+  const hints = {
+    select: '短按选中 | 长按拖移器件 | 长按格点走焊锡 | 右键拖动画面',
+    smd: '点击相邻两个格点放置贴片器件 | Esc取消',
+    header: '拖动矩形区域放置排针/排座 | Esc取消',
+    flywire: '点击两个格点创建飞线 | Esc取消',
+    solder: '双击开始 | 单击固定段 | 双击结束 | Enter完成',
+    eraser: '长按左键拖拽擦除器件/焊锡段',
+  };
+  document.getElementById('status-hint').textContent = hints[this.mode] || '';
+};
+
+// ==================== 工具栏 ====================
+App.prototype._setupToolbar = function() {
+  document.getElementById('btn-select').addEventListener('click', () => this.setMode('select'));
+  document.getElementById('btn-smd').addEventListener('click', () => this.setMode('smd'));
+  document.getElementById('btn-header').addEventListener('click', () => this.setMode('header'));
+  document.getElementById('btn-flywire').addEventListener('click', () => this.setMode('flywire'));
+  document.getElementById('btn-solder').addEventListener('click', () => this.setMode('solder'));
+  document.getElementById('btn-eraser').addEventListener('click', () => this.setMode('eraser'));
+  document.getElementById('btn-undo').addEventListener('click', () => this.undo());
+  document.getElementById('btn-redo').addEventListener('click', () => this.redo());
+  document.getElementById('btn-delete').addEventListener('click', () => this.deleteSelected());
+  document.getElementById('btn-rotate').addEventListener('click', () => this.rotateComponent());
+  document.getElementById('btn-fliph').addEventListener('click', () => this.flipHorizontal());
+  document.getElementById('btn-flipv').addEventListener('click', () => this.flipVertical());
+  document.getElementById('btn-group').addEventListener('click', () => this._groupSelected());
+  document.getElementById('btn-ungroup').addEventListener('click', () => this._ungroupSelected());
+
+  // 回到原点
+  document.getElementById('btn-home').addEventListener('click', () => {
+    const cw = this.canvas.parentElement;
+    this.zoom = 1;
+    this.offsetX = cw.clientWidth / 2;
+    this.offsetY = cw.clientHeight / 2;
+    this._needsRender = true;
+    this._updateStatus();
+    document.getElementById('status-hint').textContent = '已回到原点 (0, 0)';
+  });
+
+  // 功能介绍弹窗
+  document.getElementById('btn-features').addEventListener('click', () => {
+    document.getElementById('features-overlay').classList.toggle('show');
+  });
+
+  // 新版本介绍弹窗
+  document.getElementById('btn-version').addEventListener('click', () => {
+    document.getElementById('version-overlay').classList.toggle('show');
+  });
+
+  document.getElementById('btn-help').addEventListener('click', () => {
+    document.getElementById('help-overlay').classList.toggle('show');
+  });
+
+  document.getElementById('prop-apply').addEventListener('click', () => {
+    const sel = this.selectedObject;
+    if (!sel) return;
+    const newName = document.getElementById('prop-name').value.trim();
+    if (newName) { sel.name = newName; }
+    // 焊锡线颜色/名称（支持完整走线或选中段）
+    const traceObj = sel.points ? sel : (sel.trace ? sel.trace : null);
+    if (traceObj) {
+      const oldName = traceObj.name, oldColor = traceObj.color;
+      const newColor = document.getElementById('prop-color').value;
+      const that = this;
+      const cmd = new Command('修改焊锡属性', () => {
+        traceObj.name = newName; traceObj.color = newColor;
+        return {trace: traceObj, oldName, oldColor};
+      }, (data) => {
+        data.trace.name = data.oldName; data.trace.color = data.oldColor;
+      });
+      this.cmdMgr.execute(cmd);
+    }
+    // 组名称
+    if (sel.componentIds && newName) { sel.name = newName; }
+    this._updateCompList();
+    this._autoSave();
+  });
+
+  // 主题切换
+  document.getElementById('btn-theme').addEventListener('click', () => this._toggleTheme());
+
+  // 文件管理
+  document.getElementById('btn-newfile').addEventListener('click', () => this._newFile());
+  document.getElementById('btn-openfile').addEventListener('click', () => this._openFile());
+  document.getElementById('btn-save').addEventListener('click', () => this._save());
+  document.getElementById('btn-saveas').addEventListener('click', () => this._saveAs());
+  document.getElementById('open-file-input').addEventListener('change', (e) => {
+    this._handleOpenFile(e.target.files[0]); e.target.value = '';
+  });
+
+  // 工作区管理
+  document.getElementById('btn-ws-import').addEventListener('click', () => {
+    document.getElementById('ws-file-input').click();
+  });
+  document.getElementById('btn-ws-clear').addEventListener('click', () => {
+    if (confirm('确定清空工作区文件列表？（不会删除已保存的JSON文件）')) {
+      this._workspaceFiles = [];
+      this._saveWorkspace();
+      this._updateWorkspaceUI();
+    }
+  });
+  document.getElementById('ws-file-input').addEventListener('change', (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    let loaded = 0;
+    for (const file of files) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target.result);
+          const name = file.name.replace(/\.json$/i, '');
+          const exist = this._workspaceFiles.findIndex(f => f.name === name);
+          if (exist >= 0) this._workspaceFiles.splice(exist, 1);
+          this._workspaceFiles.push({name, data});
+          loaded++;
+          this._saveWorkspace();
+          this._updateWorkspaceUI();
+          if (loaded === files.length) {
+            document.getElementById('status-hint').textContent = `已导入 ${loaded} 个文件到工作区`;
+          }
+        } catch(err) {}
+      };
+      reader.readAsText(file);
+    }
+    e.target.value = '';
+  });
+  this._loadWorkspace();
+
+  // 关闭页面前：自动保存到localStorage，有未保存修改时提示
+  window.addEventListener('beforeunload', (e) => {
+    this._autoSave();
+    if (this._isDirty) {
+      e.preventDefault();
+    }
+  });
+};
+
+
+// ====== app-files.js ======
+// ==================== 主题 ====================
+App.prototype._toggleTheme = function() {
+  this._isLight = !this._isLight;
+  if (this._isLight) {
+    document.documentElement.classList.add('light');
+  } else {
+    document.documentElement.classList.remove('light');
+  }
+  try { localStorage.setItem('perfboard_theme', this._isLight ? 'light' : 'dark'); } catch(e) {}
+  this._needsRender = true;
+};
+
+// ==================== 文件管理 ====================
+// 保存：更新当前文件（不弹窗，无名时自动编号；另存为用_saveAs）
+App.prototype._save = function() {
+  // 无名文件自动编号，不弹窗
+  if (this._currentFile === '未命名' || !this._currentFile || (this._currentFile.startsWith('untitled') && this._currentFile !== 'untitled')) {
+    let n = 1, name = 'my-layout';
+    while (this._workspaceFiles.find(f => f.name === name)) { n++; name = 'my-layout' + n; }
+    // 移除旧untitled条目
+    if (this._currentFile && this._currentFile.startsWith('untitled')) {
+      this._workspaceFiles = this._workspaceFiles.filter(f => f.name !== this._currentFile);
+    }
+    this._currentFile = name;
+  }
+  // 保存只更新工作区，不下载文件
+  const exist = this._workspaceFiles.findIndex(f => f.name === this._currentFile);
+  if (exist >= 0) {
+    this._workspaceFiles[exist].data = this.model.toJSON();
+  } else {
+    this._workspaceFiles.push({name: this._currentFile, data: this.model.toJSON()});
+  }
+  this._saveWorkspace();
+  this._updateWorkspaceUI();
+  this._isDirty = false;
+  this._autoSave();
+  document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}`;
+};
+
+// 另存为：弹出命名框，下载 JSON 文件
+App.prototype._saveAs = function() {
+  const defName = (this._currentFile === '未命名' || (this._currentFile||'').startsWith('untitled')) ? 'my-layout' : this._currentFile;
+  const name = prompt('文件名:', defName);
+  if (!name || !name.trim()) return;
+  // 如果是从untitled改名，移除旧untitled工作区条目
+  const oldName = this._currentFile;
+  if (oldName && oldName.startsWith('untitled')) {
+    this._workspaceFiles = this._workspaceFiles.filter(f => f.name !== oldName);
+  }
+  this._currentFile = name.trim();
+  this._downloadJSON(this._currentFile + '.json');
+  const exist = this._workspaceFiles.findIndex(f => f.name === this._currentFile);
+  if (exist >= 0) {
+    this._workspaceFiles[exist].data = this.model.toJSON();
+  } else {
+    this._workspaceFiles.push({name: this._currentFile, data: this.model.toJSON()});
+  }
+  this._saveWorkspace();
+  this._updateWorkspaceUI();
+  this._isDirty = false;
+  this._autoSave();
+  document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}.json`;
+};
+
+// 打开：触发文件选择器
+App.prototype._openFile = function() {
+  document.getElementById('open-file-input').click();
+};
+
+// 新建：自动命名 untitled / untitled2 / untitled3 ...
+App.prototype._newFile = function() {
+  if (this._isDirty) {
+    if (!confirm(`"${this._currentFile}" 有未保存的修改，是否继续新建？`)) return;
+  }
+  this._autoSave();
+  // 自动编号 untitled
+  let n = 1, name = 'untitled';
+  while (this._workspaceFiles.find(f => f.name === name)) { n++; name = 'untitled' + n; }
+  this.model = new DataModel();
+  this.cmdMgr.clear();
+  this.selectedObject = null;
+  this._smdCounter = 0; this._headerCounter = 0;
+  this._currentFile = name;
+  this._isDirty = false;
+  // 加入工作区
+  this._workspaceFiles.push({name, data: this.model.toJSON()});
+  this._saveWorkspace();
+  this._updateWorkspaceUI();
+  this._updateCompList();
+  this._updatePropPanel();
+  document.getElementById('status-hint').textContent = `已新建: ${name}`;
+};
+
+// ==================== 工作区管理 ====================
+App.prototype._saveWorkspace = function() {
+  try {
+    localStorage.setItem('perfboard_workspace', JSON.stringify(
+      this._workspaceFiles.map(f => ({name: f.name, data: f.data}))
+    ));
+  } catch(e) {}
+};
+
+App.prototype._loadWorkspace = function() {
+  try {
+    const data = localStorage.getItem('perfboard_workspace');
+    if (data) this._workspaceFiles = JSON.parse(data);
+  } catch(e) { this._workspaceFiles = []; }
+  this._updateWorkspaceUI();
+};
+
+App.prototype._updateWorkspaceUI = function() {
+  const list = document.getElementById('workspace-list');
+  const current = this._currentFile;
+  let html = '';
+
+  // 显示未保存的临时文件（如果有修改且不是已知工作区文件）
+  if (this._isDirty && current !== '未命名') {
+    const inWs = this._workspaceFiles.find(f => f.name === current);
+    if (!inWs) {
+      html += `<div class="comp-item" style="color:#f39c12;font-style:italic;" data-ws="${current}">
+        ${'⬤'} ${current} (未保存)
+        <span data-del="${current}" style="float:right;color:var(--text2);cursor:pointer;margin-left:4px;">×</span>
+      </div>`;
+    }
+  }
+
+  if (this._workspaceFiles.length === 0 && !html) {
+    list.innerHTML = '<div style="color:var(--text2);padding:2px 6px;">（空）</div>';
+    return;
+  }
+
+  html += this._workspaceFiles.map(f => {
+    const isCur = f.name === current;
+    const sel = isCur ? (this._isDirty ? ' style="color:#f39c12;font-weight:bold;"' : ' style="color:var(--accent);font-weight:bold;"') : '';
+    const dot = isCur ? (this._isDirty ? '⬤ ' : '● ') : '';
+    return `<div class="comp-item"${sel} data-ws="${f.name}">
+      ${dot}${f.name}${isCur && this._isDirty ? ' (已修改)' : ''}
+      <span data-del="${f.name}" style="float:right;color:var(--text2);cursor:pointer;margin-left:4px;">×</span>
+    </div>`;
+  }).join('');
+
+  list.innerHTML = html;
+
+  // 点击切换文件
+  list.querySelectorAll('[data-ws]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.dataset.del) return;
+      const name = el.dataset.ws;
+      if (name === this._currentFile) return;
+      // 切换前：如果当前文件有修改，提示保存
+      if (this._isDirty) {
+        if (confirm(`"${this._currentFile}" 有未保存的修改，是否保存后切换？`)) {
+          this._save();
+        }
+      }
+      this._switchToFile(name);
+      document.getElementById('status-hint').textContent = `已切换: ${name}`;
+    });
+  });
+
+  // 删除按钮
+  list.querySelectorAll('[data-del]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const name = el.dataset.del;
+      const wasCurrent = name === this._currentFile;
+      this._workspaceFiles = this._workspaceFiles.filter(x => x.name !== name);
+      this._saveWorkspace();
+      // 如果删除的是当前文件，自动切换到相邻文件
+      if (wasCurrent) {
+        if (this._workspaceFiles.length > 0) {
+          // 优先切换到相邻的前一个
+          const idx = Math.min(this._workspaceFiles.length - 1, 0);
+          const next = this._workspaceFiles[Math.max(0, idx)];
+          this._switchToFile(next.name);
+          document.getElementById('status-hint').textContent = `已移除并切换到: ${next.name}`;
+        } else {
+          // 无文件了，清空画布
+          this.model = new DataModel();
+          this.cmdMgr.clear();
+          this.selectedObject = null;
+          this._smdCounter = 0; this._headerCounter = 0;
+          this._currentFile = '未命名';
+          this._isDirty = false;
+          this._needsRender = true;
+          this._updateCompList();
+          this._updatePropPanel();
+          document.getElementById('status-hint').textContent = '工作区已清空';
+        }
+        return;
+      }
+      this._updateWorkspaceUI();
+      document.getElementById('status-hint').textContent = `已从工作区移除: ${name}`;
+    });
+  });
+};
+
+// 切换到指定文件（内部辅助）
+App.prototype._switchToFile = function(name) {
+  const f = this._workspaceFiles.find(x => x.name === name);
+  if (!f) return;
+  // 先更新当前文件的工作区数据（脏数据不丢失）
+  if (this._isDirty && this._currentFile && this._currentFile !== '未命名') {
+    const exist = this._workspaceFiles.findIndex(x => x.name === this._currentFile);
+    if (exist >= 0) {
+      this._workspaceFiles[exist].data = this.model.toJSON();
+    }
+  }
+  this._autoSave(); // 先保存当前
+  this.model = new DataModel();
+  this.model.fromJSON(f.data);
+  this.cmdMgr.clear();
+  this.selectedObject = null;
+  this._smdCounter = 0; this._headerCounter = 0;
+  for (const c of this.model.smdComponents) {
+    const m = c.name.match(/^R(\d+)$/);
+    if (m) this._smdCounter = Math.max(this._smdCounter, parseInt(m[1]) + 1);
+  }
+  for (const c of this.model.headerComponents) {
+    const m = c.name.match(/^J(\d+)$/);
+    if (m) this._headerCounter = Math.max(this._headerCounter, parseInt(m[1]) + 1);
+  }
+  this._currentFile = name;
+  this._isDirty = false;
+  this._needsRender = true;
+  this._updateWorkspaceUI();
+  this._updateCompList();
+  this._updatePropPanel();
+};
+
+// 打开文件并加入工作区
+App.prototype._handleOpenFile = function(file) {
+  if (!file) return;
+  document.getElementById('status-hint').textContent = '正在加载...';
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      const name = file.name.replace(/\.json$/i, '');
+      const exist = this._workspaceFiles.findIndex(f => f.name === name);
+      if (exist >= 0) this._workspaceFiles.splice(exist, 1);
+      this._workspaceFiles.push({name, data});
+      this._saveWorkspace();
+
+      this.model = new DataModel();
+      this.model.fromJSON(data);
+      this.cmdMgr.clear();
+      this.selectedObject = null;
+      this._smdCounter = 0; this._headerCounter = 0;
+      for (const c of this.model.smdComponents) {
+        const m = c.name.match(/^R(\d+)$/);
+        if (m) this._smdCounter = Math.max(this._smdCounter, parseInt(m[1]) + 1);
+      }
+      for (const c of this.model.headerComponents) {
+        const m = c.name.match(/^J(\d+)$/);
+        if (m) this._headerCounter = Math.max(this._headerCounter, parseInt(m[1]) + 1);
+      }
+      this._currentFile = name;
+      this._isDirty = false;
+      this._needsRender = true;
+      this._updateWorkspaceUI();
+      this._updateCompList();
+      this._updatePropPanel();
+      this._autoSave();
+      document.getElementById('status-hint').textContent = `已打开: ${name}`;
+    } catch (err) { alert('打开失败：无效的 JSON 文件'); }
+  };
+  reader.readAsText(file);
+};
+
+// ==================== 持久化（仅用于会话恢复） ====================
+App.prototype._autoSave = function() {
+  try {
+    localStorage.setItem('perfboard_session', JSON.stringify({
+      model: this.model.toJSON(),
+      currentFile: this._currentFile,
+      smdCounter: this._smdCounter,
+      headerCounter: this._headerCounter,
+    }));
+  } catch(e) {}
+};
+
+App.prototype._loadFromStorage = function() {
+  // 恢复主题
+  try {
+    const theme = localStorage.getItem('perfboard_theme');
+    if (theme === 'light') { this._isLight = true; document.documentElement.classList.add('light'); }
+  } catch(e) {}
+
+  // 检测是否有上次会话
+  let hasSession = false;
+  try {
+    const data = localStorage.getItem('perfboard_session');
+    if (data) {
+      const parsed = JSON.parse(data);
+      if (parsed.model && (parsed.model.smdComponents?.length > 0 || parsed.model.headerComponents?.length > 0 || parsed.model.solderTraces?.length > 0)) {
+        hasSession = true;
+        // 暂存，等用户确认后恢复
+        this._pendingSession = parsed;
+      }
+    }
+  } catch(e) {}
+
+  // 恢复工作区
+  this._loadWorkspace();
+
+  // 初始居中
+  this.offsetX = this.canvas.parentElement.clientWidth / 2;
+  this.offsetY = this.canvas.parentElement.clientHeight / 2;
+
+  // 如果有上次会话，显示恢复提示
+  if (hasSession) {
+    document.getElementById('status-hint').innerHTML = '<span style="cursor:pointer;text-decoration:underline;color:var(--accent);" onclick="app._restoreSession()">点击恢复上次会话</span> | <span style="cursor:pointer;text-decoration:underline;" onclick="app._discardSession()">忽略</span>';
+  }
+};
+
+App.prototype._restoreSession = function() {
+  if (!this._pendingSession) return;
+  const parsed = this._pendingSession;
+  this.model.fromJSON(parsed.model);
+  this._currentFile = parsed.currentFile || '未命名';
+  this._smdCounter = parsed.smdCounter || 0;
+  this._headerCounter = parsed.headerCounter || 0;
+  this.cmdMgr.clear();
+  this._pendingSession = null;
+  // 恢复计数器
+  for (const c of this.model.smdComponents) {
+    const m = c.name.match(/^R(\d+)$/);
+    if (m) this._smdCounter = Math.max(this._smdCounter, parseInt(m[1]) + 1);
+  }
+  for (const c of this.model.headerComponents) {
+    const m = c.name.match(/^J(\d+)$/);
+    if (m) this._headerCounter = Math.max(this._headerCounter, parseInt(m[1]) + 1);
+  }
+  this._updateCompList();
+  this._updatePropPanel();
+  document.getElementById('status-hint').textContent = '已恢复上次会话';
+};
+
+App.prototype._discardSession = function() {
+  this._pendingSession = null;
+  try { localStorage.removeItem('perfboard_session'); } catch(e) {}
+  document.getElementById('status-hint').textContent = '已开始全新布局';
+};
+
+
+// ====== main.js ======
+// ==================== 启动 ====================
+const app = new App();
+
+</script>
+</body>
+</html>

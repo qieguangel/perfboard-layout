@@ -118,4 +118,43 @@ class HitTester {
     }
     return best;
   }
+
+  // Ctrl+点击多选命中测试：不跳过编组成员，返回最先命中的对象
+  hitAnythingAt(sx, sy) {
+    const hitDist = Math.max(8, this.gridSize * this.zoom * 0.25);
+
+    // 1. 焊锡段（最近优先）
+    let bestSeg = null, bestSegDist = hitDist;
+    for (const trace of this.model.solderTraces) {
+      for (let i = 0; i < trace.points.length - 1; i++) {
+        const a = this.gridToScreen(trace.points[i].gx, trace.points[i].gy);
+        const b = this.gridToScreen(trace.points[i + 1].gx, trace.points[i + 1].gy);
+        const d = distToSeg(sx, sy, a.sx, a.sy, b.sx, b.sy);
+        if (d < bestSegDist) { bestSegDist = d; bestSeg = {type: 'trace', trace, id: trace.id}; }
+      }
+    }
+    if (bestSeg) return bestSeg;
+
+    // 2. 飞线
+    let bestFw = null, bestFwDist = hitDist;
+    for (const fw of this.model.flyWires) {
+      const a = this.gridToScreen(fw.from.gx, fw.from.gy);
+      const b = this.gridToScreen(fw.to.gx, fw.to.gy);
+      const d = distToSeg(sx, sy, a.sx, a.sy, b.sx, b.sy);
+      if (d < bestFwDist) { bestFwDist = d; bestFw = {type: 'flywire', id: fw.id, obj: fw}; }
+    }
+    if (bestFw) return bestFw;
+
+    // 3. 所有器件（不跳过编组成员）
+    let bestComp = null, bestCompDist = Infinity;
+    for (const comp of this.model.allComponents()) {
+      const d = this._distToComponent(comp, sx, sy);
+      if (d !== null && d < bestCompDist) { bestCompDist = d; bestComp = comp; }
+    }
+    if (bestComp) {
+      const threshold = bestComp.type === 'smd' ? this.gridSize * this.zoom + SMD_HIT_DIST : SMD_HIT_DIST;
+      if (bestCompDist < threshold) return {type: bestComp.type, id: bestComp.id, obj: bestComp};
+    }
+    return null;
+  }
 }

@@ -215,26 +215,53 @@ class Renderer {
     const ctx = this.ctx;
     const dashLen = 4;
 
-    // 多选框选高亮
-    const multi = this.app._multiSelection;
+    // 多选框选高亮（混合类型）
+    const multi = this.app._multiSelObjects;
     if (multi.length > 0) {
       const gs = this.gridSize * this.zoom;
-      for (const cid of multi) {
-        const c = this.app.model.findById(cid);
-        if (!c) continue;
-        ctx.strokeStyle = '#f39c12'; ctx.lineWidth = 2;
-        ctx.setLineDash([dashLen, dashLen]);
-        if (c.type === 'smd') {
-          const a = this.gridToScreen(c.gx1, c.gy1), b = this.gridToScreen(c.gx2, c.gy2);
-          const cx = (a.sx + b.sx) / 2, cy = (a.sy + b.sy) / 2;
-          const isH = c.gy1 === c.gy2;
-          const bw = isH ? gs * 0.85 + 6 : gs * 0.3 + 6;
-          const bh = isH ? gs * 0.3 + 6 : gs * 0.85 + 6;
-          ctx.strokeRect(cx - bw/2, cy - bh/2, bw, bh);
-        } else {
-          const p = this.gridToScreen(c.gx, c.gy);
-          const w = (c.w - 1) * gs, h = (c.h - 1) * gs, m = gs * 0.35 + 3;
-          ctx.strokeRect(p.sx - m, p.sy - m, w + m*2, h + m*2);
+      ctx.strokeStyle = '#f39c12'; ctx.lineWidth = 2;
+      ctx.setLineDash([dashLen, dashLen]);
+      for (const o of multi) {
+        if (o.type === 'smd' || o.type === 'header') {
+          const c = this.app.model.findById(o.id);
+          if (!c) continue;
+          if (c.type === 'smd') {
+            const a = this.gridToScreen(c.gx1, c.gy1), b = this.gridToScreen(c.gx2, c.gy2);
+            const cx = (a.sx + b.sx) / 2, cy = (a.sy + b.sy) / 2;
+            const isH = c.gy1 === c.gy2;
+            const bw = isH ? gs * 0.85 + 6 : gs * 0.3 + 6;
+            const bh = isH ? gs * 0.3 + 6 : gs * 0.85 + 6;
+            ctx.strokeRect(cx - bw/2, cy - bh/2, bw, bh);
+          } else {
+            const p = this.gridToScreen(c.gx, c.gy);
+            const w = (c.w - 1) * gs, h = (c.h - 1) * gs, m = gs * 0.35 + 3;
+            ctx.strokeRect(p.sx - m, p.sy - m, w + m*2, h + m*2);
+          }
+        } else if (o.type === 'trace') {
+          const trace = this.app.model.solderTraces.find(t => t.id === o.id);
+          if (!trace || trace.points.length < 2) continue;
+          ctx.beginPath();
+          const p0 = this.gridToScreen(trace.points[0].gx, trace.points[0].gy);
+          ctx.moveTo(p0.sx, p0.sy);
+          for (let i = 1; i < trace.points.length; i++) {
+            const pt = this.gridToScreen(trace.points[i].gx, trace.points[i].gy);
+            ctx.lineTo(pt.sx, pt.sy);
+          }
+          ctx.stroke();
+          for (const pt of [trace.points[0], trace.points[trace.points.length - 1]]) {
+            const p = this.gridToScreen(pt.gx, pt.gy);
+            ctx.fillStyle = '#f39c12';
+            ctx.beginPath(); ctx.arc(p.sx, p.sy, 4, 0, Math.PI*2); ctx.fill();
+          }
+        } else if (o.type === 'flywire') {
+          const fw = this.app.model.flyWires.find(f => f.id === o.id);
+          if (!fw) continue;
+          const a = this.gridToScreen(fw.from.gx, fw.from.gy);
+          const b = this.gridToScreen(fw.to.gx, fw.to.gy);
+          ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
+          ctx.fillStyle = '#f39c12';
+          ctx.beginPath(); ctx.arc(a.sx, a.sy, 4, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(b.sx, b.sy, 4, 0, Math.PI*2); ctx.fill();
         }
       }
       ctx.setLineDash([]);
