@@ -38,7 +38,7 @@
   <button id="btn-home" title="回到原点 (0,0)">🏠 原点</button>
   <span class="sep"></span>
   <button id="btn-features" title="功能介绍">📖 功能介绍</button>
-  <button id="btn-version" title="新版本介绍">🆕 v1.5</button>
+  <button id="btn-version" title="新版本介绍">🆕 v1.6</button>
   <button id="btn-help" title="快捷键说明">?</button>
   <button id="btn-theme" title="切换浅色/深色模式">🌓</button>
   <span class="sep"></span>
@@ -133,11 +133,13 @@
 <div id="version-overlay" class="overlay" onclick="if(event.target===this) this.classList.remove('show')">
   <div class="overlay-panel" style="max-width:500px;">
     <button class="close-btn" onclick="document.getElementById('version-overlay').classList.remove('show')">&times;</button>
-    <h3>v1.5 新版本介绍</h3>
+    <h3>v1.6 新版本介绍</h3>
     <div style="font-size:13px;line-height:1.8;">
-      <p>✅ <b>框选编组保护：</b>框选只部分包含编组成员时不再误移动孤立成员</p>
-      <p>✅ <b>保存真正生效：</b>保存后清除session，刷新页面自动加载工作区文件(不再空白)</p>
-      <p>📋 <b>v1.4 回顾：</b>编组拖动修复、飞线点击拖动、页面刷新自动恢复</p>
+      <p>✅ <b>保存写回磁盘：</b>使用 File System Access API 将修改真正写入 JSON 文件(Edge/Chrome)</p>
+      <p>✅ <b>打开关联句柄：</b>打开文件时记录文件句柄，保存时直接写回原文件</p>
+      <p>✅ <b>另存为原生对话框：</b>使用 showSaveFilePicker 原生保存窗口</p>
+      <p>✅ <b>深拷贝修复：</b>toJSON/fromJSON 打破引用共享，保护数据完整性</p>
+      <p>📋 <b>v1.5 回顾：</b>框选编组保护、保存session修复、8场景测试覆盖</p>
     </div>
   </div>
 </div>

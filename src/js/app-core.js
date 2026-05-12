@@ -61,6 +61,7 @@ class App {
     this._currentFile = '未命名';
     this._workspaceFiles = []; // {name, data} 工作区文件列表
     this._isDirty = false;     // 当前文件是否有未保存修改
+    this._fileHandle = null;   // File System Access API 文件句柄
 
     // 主题
     this._isLight = false;

@@ -11,21 +11,35 @@ App.prototype._toggleTheme = function() {
 };
 
 // ==================== 文件管理 ====================
-// 保存：更新当前文件（不弹窗，无名时自动编号；另存为用_saveAs）
+
+// 写入数据到文件句柄（File System Access API）
+App.prototype._writeToFile = async function(jsonData, filename) {
+  if (this._fileHandle) {
+    try {
+      const writable = await this._fileHandle.createWritable();
+      await writable.write(JSON.stringify(jsonData, null, 2));
+      await writable.close();
+      return true;
+    } catch(e) { /* 写文件失败，降级为下载 */ }
+  }
+  // 降级：下载 JSON 文件
+  this._downloadJSON(filename + '.json');
+  return false;
+};
+
+// 保存：更新工作区 + 写回真实 JSON 文件
 App.prototype._save = function() {
-  // 无名文件自动编号，不弹窗
+  // 无名文件自动编号
   if (this._currentFile === '未命名' || !this._currentFile || (this._currentFile.startsWith('untitled') && this._currentFile !== 'untitled')) {
     let n = 1, name = 'my-layout';
     while (this._workspaceFiles.find(f => f.name === name)) { n++; name = 'my-layout' + n; }
-    // 移除旧untitled条目
     if (this._currentFile && this._currentFile.startsWith('untitled')) {
       this._workspaceFiles = this._workspaceFiles.filter(f => f.name !== this._currentFile);
     }
     this._currentFile = name;
   }
-  // 保存：仅更新工作区，不下载文件
-  const exist = this._workspaceFiles.findIndex(f => f.name === this._currentFile);
   const saveData = this.model.toJSON();
+  const exist = this._workspaceFiles.findIndex(f => f.name === this._currentFile);
   if (exist >= 0) {
     this._workspaceFiles[exist].data = saveData;
   } else {
@@ -34,38 +48,67 @@ App.prototype._save = function() {
   this._saveWorkspace();
   this._updateWorkspaceUI();
   this._isDirty = false;
-  // 清除 session（已保存到 workspace，无需 session 恢复）
   try { localStorage.removeItem('perfboard_session'); } catch(e) {}
-  document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}`;
+  // 写回真实 JSON 文件（File System Access API）或降级下载
+  this._writeToFile(saveData, this._currentFile);
+  document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}` + (this._fileHandle ? ' ↻磁盘' : ' ↓下载');
 };
 
-// 另存为：弹出命名框，下载 JSON 文件
-App.prototype._saveAs = function() {
+// 另存为：弹窗命名 + 写文件/下载
+App.prototype._saveAs = async function() {
   const defName = (this._currentFile === '未命名' || (this._currentFile||'').startsWith('untitled')) ? 'my-layout' : this._currentFile;
   const name = prompt('文件名:', defName);
   if (!name || !name.trim()) return;
-  // 如果是从untitled改名，移除旧untitled工作区条目
   const oldName = this._currentFile;
   if (oldName && oldName.startsWith('untitled')) {
     this._workspaceFiles = this._workspaceFiles.filter(f => f.name !== oldName);
   }
   this._currentFile = name.trim();
-  this._downloadJSON(this._currentFile + '.json');
+  const saveData = this.model.toJSON();
   const exist = this._workspaceFiles.findIndex(f => f.name === this._currentFile);
   if (exist >= 0) {
-    this._workspaceFiles[exist].data = this.model.toJSON();
+    this._workspaceFiles[exist].data = saveData;
   } else {
-    this._workspaceFiles.push({name: this._currentFile, data: this.model.toJSON()});
+    this._workspaceFiles.push({name: this._currentFile, data: saveData});
   }
   this._saveWorkspace();
   this._updateWorkspaceUI();
   this._isDirty = false;
-  this._autoSave();
-  document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}.json`;
+  // 优先用 File System Access API 的 Save Picker
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: this._currentFile + '.json',
+        types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(JSON.stringify(saveData, null, 2));
+      await writable.close();
+      this._fileHandle = handle;
+      document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}.json ↻磁盘`;
+      return;
+    } catch(e) { /* 用户取消或失败，降级下载 */ }
+  }
+  this._downloadJSON(this._currentFile + '.json');
+  document.getElementById('status-hint').textContent = `已保存: ${this._currentFile}.json ↓下载`;
 };
 
-// 打开：触发文件选择器
-App.prototype._openFile = function() {
+// 打开：优先用 File System Access API，降级为传统文件选择器
+App.prototype._openFile = async function() {
+  if (window.showOpenFilePicker) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+      });
+      const file = await handle.getFile();
+      const text = await file.text();
+      this._fileHandle = handle;
+      const name = file.name.replace(/\.json$/i, '');
+      this._loadFileData(name, JSON.parse(text));
+      return;
+    } catch(e) { /* 用户取消，不处理 */ return; }
+  }
+  // 降级：传统文件选择器
   document.getElementById('open-file-input').click();
 };
 
@@ -228,39 +271,43 @@ App.prototype._switchToFile = function(name) {
 };
 
 // 打开文件并加入工作区
+// 加载文件数据到模型+工作区（共享逻辑）
+App.prototype._loadFileData = function(name, data) {
+  const exist = this._workspaceFiles.findIndex(f => f.name === name);
+  if (exist >= 0) this._workspaceFiles.splice(exist, 1);
+  this._workspaceFiles.push({name, data});
+  this._saveWorkspace();
+  this.model = new DataModel();
+  this.model.fromJSON(data);
+  this.cmdMgr.clear();
+  this.selectedObject = null;
+  this._smdCounter = 0; this._headerCounter = 0;
+  for (const c of this.model.smdComponents) {
+    const m = c.name.match(/^R(\d+)$/);
+    if (m) this._smdCounter = Math.max(this._smdCounter, parseInt(m[1]) + 1);
+  }
+  for (const c of this.model.headerComponents) {
+    const m = c.name.match(/^J(\d+)$/);
+    if (m) this._headerCounter = Math.max(this._headerCounter, parseInt(m[1]) + 1);
+  }
+  this._currentFile = name;
+  this._isDirty = false;
+  this._needsRender = true;
+  this._updateWorkspaceUI();
+  this._updateCompList();
+  this._updatePropPanel();
+};
+
 App.prototype._handleOpenFile = function(file) {
   if (!file) return;
   document.getElementById('status-hint').textContent = '正在加载...';
   const reader = new FileReader();
+  const that = this;
   reader.onload = () => {
     try {
       const data = JSON.parse(reader.result);
       const name = file.name.replace(/\.json$/i, '');
-      const exist = this._workspaceFiles.findIndex(f => f.name === name);
-      if (exist >= 0) this._workspaceFiles.splice(exist, 1);
-      this._workspaceFiles.push({name, data});
-      this._saveWorkspace();
-
-      this.model = new DataModel();
-      this.model.fromJSON(data);
-      this.cmdMgr.clear();
-      this.selectedObject = null;
-      this._smdCounter = 0; this._headerCounter = 0;
-      for (const c of this.model.smdComponents) {
-        const m = c.name.match(/^R(\d+)$/);
-        if (m) this._smdCounter = Math.max(this._smdCounter, parseInt(m[1]) + 1);
-      }
-      for (const c of this.model.headerComponents) {
-        const m = c.name.match(/^J(\d+)$/);
-        if (m) this._headerCounter = Math.max(this._headerCounter, parseInt(m[1]) + 1);
-      }
-      this._currentFile = name;
-      this._isDirty = false;
-      this._needsRender = true;
-      this._updateWorkspaceUI();
-      this._updateCompList();
-      this._updatePropPanel();
-      this._autoSave();
+      that._loadFileData(name, data);
       document.getElementById('status-hint').textContent = `已打开: ${name}`;
     } catch (err) { alert('打开失败：无效的 JSON 文件'); }
   };
